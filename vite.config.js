@@ -13,7 +13,7 @@ export default defineConfig({
     server: {
         proxy: {
             '/api': {
-                target: 'http://140.120.40.192',
+                target: 'http://localhost:8000',
                 changeOrigin: true,
                 // The backend doesn't expect /api prefix, so we need to remove it
                 rewrite: (path) => path.replace(/^\/api/, '')

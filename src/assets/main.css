@@ -124,3 +124,50 @@ tr:nth-child(even) {
     border: 1px solid #c3e6cb;
     color: #155724;
 }
+
+/* CSV example styles */
+.csv-example {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+    margin-top: 0.5rem;
+}
+
+.csv-example code {
+    background-color: #e9ecef;
+    padding: 0.5rem;
+    border-radius: 3px;
+    display: block;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    margin: 0.5rem 0;
+    color: #495057;
+}
+
+.csv-example p {
+    margin: 0.5rem 0;
+    font-weight: 500;
+}
+
+.sample-download {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #dee2e6;
+}
+
+.sample-download .btn {
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #545b62;
+}

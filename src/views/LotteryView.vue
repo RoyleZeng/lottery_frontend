@@ -44,16 +44,51 @@
                 <p><strong>已選擇類型：</strong>{{ getSelectedTypeName() }}</p>
             </div>
 
-            <div v-if="lotteryStore.lotteryEvents.length === 0">
-                <p>目前沒有可用的抽獎活動，請新增一個活動開始使用。</p>
+            <!-- Filter Section -->
+            <div class="filter-section">
+                <div class="filter-group">
+                    <label for="year-filter" class="filter-label">📅 學年篩選：</label>
+                    <select id="year-filter" v-model="selectedYear" @change="filterEventsByYear" class="filter-select">
+                        <option value="">所有學年</option>
+                        <option v-for="year in availableYears" :key="year" :value="year">{{ year }}</option>
+                    </select>
+                </div>
+                <div class="events-count">
+                    <span class="count-badge">共 {{ filteredEvents.length }} 個活動</span>
+                </div>
+            </div>
+
+            <div v-if="lotteryStore.lotteryEvents.length === 0" class="empty-state">
+                <div class="empty-icon">🎯</div>
+                <h3>目前沒有抽獎活動</h3>
+                <p>請新增一個活動開始使用抽獎系統</p>
+                <button class="btn btn-primary" @click="showCreateEventModal = true">
+                    <span>📝</span> 立即新增活動
+                </button>
             </div>
 
             <div v-else class="event-list">
-                <div v-for="event in lotteryStore.lotteryEvents" :key="event.id" class="event-item"
-                    @click="selectEvent(event.id)">
-                    <h4>{{ event.name }}</h4>
-                    <p>{{ event.academic_year_term }}</p>
-                    <small>{{ event.description }}</small>
+                <div v-for="event in filteredEvents" :key="event.id" class="event-item" @click="selectEvent(event.id)">
+                    <div class="event-header">
+                        <span :class="getStatusClass(event.status)">
+                            <span class="status-icon">{{ getStatusIcon(event.status) }}</span>
+                            {{ getStatusText(event.status) }}
+                        </span>
+                        <button class="delete-btn" @click.stop="confirmDeleteEvent(event)"
+                            :disabled="lotteryStore.loading" title="刪除活動">
+                            🗑️
+                        </button>
+                    </div>
+                    
+                    <div class="event-content">
+                        <h4>{{ event.name }}</h4>
+                        <p class="academic-year">{{ event.academic_year_term }}</p>
+                        <small class="event-description">{{ event.description }}</small>
+                    </div>
+                    
+                    <div class="event-footer">
+                        <span class="event-date">{{ formatDate(event.event_date) }}</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -146,11 +181,11 @@
                     <div class="participants-header">
                         <h3>待抽名單</h3>
                         <div class="participants-actions">
-                            <input type="file" ref="fileInput" @change="handleFileUpload" accept=".xlsx,.xls"
+                            <input type="file" ref="fileInput" @change="handleFileUpload" accept=".xlsx,.xls,.csv"
                                 style="display: none" />
                             <button class="btn btn-primary" @click="$refs.fileInput.click()"
                                 :disabled="lotteryStore.loading">
-                                上傳 Excel
+                                上傳檔案
                             </button>
                             <button class="btn btn-danger" @click="confirmDeleteAllParticipants"
                                 :disabled="lotteryStore.loading || lotteryStore.participants.length === 0">
@@ -195,17 +230,24 @@
                     <div v-else>
                         <div class="empty-participants">
                             <p>沒有待抽名單資料</p>
-                            <p>請上傳 Excel 檔案來匯入參與者名單</p>
+                            <p>請上傳 Excel 或 CSV 檔案來匯入參與者名單</p>
                             <button class="btn btn-primary" @click="$refs.fileInput.click()">
-                                上傳 Excel 檔案
+                                上傳檔案
                             </button>
                         </div>
                     </div>
 
-                    <!-- Excel Upload Instructions -->
+                    <!-- File Upload Instructions -->
                     <div class="upload-instructions">
-                        <h4>Excel 檔案格式說明</h4>
+                        <h4>檔案格式說明</h4>
                         <div class="format-info">
+                            <div class="format-section">
+                                <h5>支援的檔案格式：</h5>
+                                <ul>
+                                    <li>Excel 檔案 (.xlsx, .xls)</li>
+                                    <li>CSV 檔案 (.csv) - 建議使用 UTF-8 編碼</li>
+                                </ul>
+                            </div>
                             <div class="format-section">
                                 <h5>學生學習問卷抽獎 (general) 必要欄位：</h5>
                                 <ul>
@@ -223,6 +265,24 @@
                                     <li>是否填畢 (surveys_completed)</li>
                                     <li>有效問卷 (valid_surveys)</li>
                                 </ul>
+                            </div>
+                            <div class="format-section">
+                                <h5>CSV 檔案格式範例：</h5>
+                                <div class="csv-example">
+                                    <p><strong>基本格式：</strong></p>
+                                    <code>學號,姓名,系所,年級<br>S1234567,王小明,資訊工程學系,大三</code>
+                                    <br><br>
+                                    <p><strong>期末評量格式：</strong></p>
+                                    <code>學號,姓名,系所,年級,應填問卷數,已填問卷數,是否填畢,有效問卷<br>S1234567,王小明,資訊工程學系,大三,5,5,是,是</code>
+                                    <br><br>
+                                    <div class="sample-download">
+                                        <p><strong>範例檔案下載：</strong></p>
+                                        <a href="/sample_students.csv" download="學生名單範例.csv"
+                                            class="btn btn-secondary">下載基本格式範例</a>
+                                        <a href="/sample_students_final.csv" download="期末評量學生名單範例.csv"
+                                            class="btn btn-secondary">下載期末評量格式範例</a>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -608,6 +668,9 @@
                                         <button type="button" class="btn btn-secondary" @click="showEmailModal = false">
                                             取消
                                         </button>
+                                        <button type="button" class="btn btn-warning" @click="showTestEmailModal = true">
+                                            測試寄送
+                                        </button>
                                         <button type="submit" class="btn btn-primary" :disabled="lotteryStore.loading">
                                             {{ lotteryStore.loading ? '寄送中...' : '寄送郵件' }}
                                         </button>
@@ -636,6 +699,101 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Test Email Modal -->
+                    <div v-if="showTestEmailModal" class="modal-overlay" @click="showTestEmailModal = false">
+                        <div class="modal-content test-email-modal" @click.stop>
+                            <div class="modal-header">
+                                <h4>🧪 測試郵件寄送</h4>
+                                <button class="close-btn" @click="showTestEmailModal = false">×</button>
+                            </div>
+                            <div class="modal-body">
+                                <p>輸入測試收件人的郵箱地址，系統將使用虛擬中獎者資料發送測試郵件：</p>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">測試收件人郵箱 (一行一個)</label>
+                                    <textarea v-model="testEmailList" class="form-control" rows="5" 
+                                        placeholder="請輸入測試郵箱地址，一行一個：&#10;test1@example.com&#10;test2@example.com&#10;admin@company.com"></textarea>
+                                    <small class="form-text">請輸入有效的郵箱地址，一行一個</small>
+                                </div>
+
+                                <div class="test-email-info">
+                                    <h5>📋 測試資料說明</h5>
+                                    <p>系統將使用以下虛擬資料發送測試郵件：</p>
+                                    <ul>
+                                        <li><strong>得獎人姓名：</strong>測試用戶</li>
+                                        <li><strong>學號：</strong>TEST001</li>
+                                        <li><strong>系所：</strong>測試系所</li>
+                                        <li><strong>年級：</strong>測試年級</li>
+                                        <li><strong>獎項：</strong>測試獎品</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="modal-actions">
+                                <button type="button" class="btn btn-secondary" @click="showTestEmailModal = false">
+                                    取消
+                                </button>
+                                <button type="button" class="btn btn-primary" @click="sendTestEmail" 
+                                    :disabled="lotteryStore.loading || !testEmailList.trim()">
+                                    {{ lotteryStore.loading ? '寄送中...' : '發送測試郵件' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lottery Animation Modal -->
+        <div v-if="showLotteryModal" class="modal-overlay lottery-modal-overlay">
+            <div class="lottery-modal-content" @click.stop>
+                <!-- Preparing Stage -->
+                <div v-if="lotteryAnimationStage === 'preparing'" class="lottery-stage preparing-stage">
+                    <div class="lottery-icon">🎲</div>
+                    <h2>準備抽獎中...</h2>
+                    <div class="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+
+                <!-- Drawing Stage -->
+                <div v-if="lotteryAnimationStage === 'drawing'" class="lottery-stage drawing-stage">
+                    <div class="lottery-header">
+                        <div class="lottery-icon spinning">🎯</div>
+                        <h2>正在抽取獎項</h2>
+                        <h3 class="current-prize">{{ currentPrize }}</h3>
+                    </div>
+                    
+                    <div class="numbers-container">
+                        <div class="numbers-display">
+                            <div v-for="(number, index) in animatedNumbers" :key="index" 
+                                 class="animated-number">
+                                {{ number }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="drawing-effect">
+                        <div class="sparkle"></div>
+                        <div class="sparkle"></div>
+                        <div class="sparkle"></div>
+                        <div class="sparkle"></div>
+                    </div>
+                </div>
+
+                <!-- Completed Stage -->
+                <div v-if="lotteryAnimationStage === 'completed'" class="lottery-stage completed-stage">
+                    <div class="lottery-icon celebration">🎉</div>
+                    <h2>抽獎完成！</h2>
+                    <div class="results-summary">
+                        <div v-for="(result, index) in lotteryResults" :key="index" class="result-item">
+                            <span class="prize-name">{{ result.name }}</span>
+                            <span class="winner-count">{{ result.winners.length }} 位中獎</span>
+                        </div>
+                    </div>
+                    <p class="auto-close-hint">3秒後自動關閉...</p>
                 </div>
             </div>
         </div>
@@ -746,6 +904,22 @@ const templateVariables = ref([
 const showPreviewModal = ref(false);
 const previewContent = ref('');
 
+// Test email related variables
+const showTestEmailModal = ref(false);
+const testEmailList = ref('');
+
+// Filter related variables
+const selectedYear = ref('');
+const availableYears = ref([]);
+const filteredEvents = ref([]);
+
+// Lottery animation modal variables
+const showLotteryModal = ref(false);
+const lotteryAnimationStage = ref('preparing'); // preparing, drawing, completed
+const animatedNumbers = ref([]);
+const currentPrize = ref('');
+const lotteryResults = ref([]);
+
 // Email editor mode
 const emailEditorMode = ref('visual'); // 'visual' or 'html'
 
@@ -782,8 +956,16 @@ watch(() => lotteryStore.selectedType, async (newType) => {
         // If type is null, reset everything
         selectedEventId.value = null;
         activeTab.value = 'participants';
+        selectedYear.value = '';
+        filteredEvents.value = [];
+        availableYears.value = [];
     }
 });
+
+// Watch for lottery events change
+watch(() => lotteryStore.lotteryEvents, () => {
+    initializeFilteredEvents();
+}, { deep: true });
 
 // Watch for selected event change
 watch(selectedEventId, async (newValue) => {
@@ -880,10 +1062,69 @@ const savePrizes = async () => {
     await lotteryStore.savePrizeSettings(selectedEventId.value, prizes.value);
 };
 
-// Run lottery
+// Run lottery with animation
 const runLottery = async () => {
+    showLotteryModal.value = true;
+    lotteryAnimationStage.value = 'preparing';
+    lotteryResults.value = [];
+    
+    // Start animation sequence
+    await startLotteryAnimation();
+    
+    // Perform actual lottery
     await lotteryStore.runLottery(selectedEventId.value);
+    
+    // Show results
+    lotteryAnimationStage.value = 'completed';
+    lotteryResults.value = getFormattedWinners();
     isDrawCompleted.value = true;
+    
+    // Auto close after showing results
+    setTimeout(() => {
+        showLotteryModal.value = false;
+    }, 3000);
+};
+
+// Start lottery animation sequence
+const startLotteryAnimation = async () => {
+    // Preparing stage
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Drawing stage
+    lotteryAnimationStage.value = 'drawing';
+    
+    // Animate through each prize
+    for (let i = 0; i < lotteryStore.prizeSettings.length; i++) {
+        const prize = lotteryStore.prizeSettings[i];
+        currentPrize.value = prize.name;
+        
+        // Generate random numbers animation for this prize
+        await animateNumbersForPrize(prize);
+        
+        // Pause between prizes
+        if (i < lotteryStore.prizeSettings.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+    }
+};
+
+// Animate numbers for a specific prize
+const animateNumbersForPrize = async (prize) => {
+    const participantIds = lotteryStore.participants.map(p => p.student_id || p.id);
+    const animationDuration = 2000; // 2 seconds
+    const frameRate = 50; // milliseconds per frame
+    const totalFrames = animationDuration / frameRate;
+    
+    for (let frame = 0; frame < totalFrames; frame++) {
+        // Generate random student IDs for animation
+        animatedNumbers.value = [];
+        for (let j = 0; j < Math.min(prize.quantity, 5); j++) {
+            const randomId = participantIds[Math.floor(Math.random() * participantIds.length)];
+            animatedNumbers.value.push(randomId);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, frameRate));
+    }
 };
 
 // Export winners list
@@ -1036,11 +1277,11 @@ const handleFileUpload = async (event) => {
     if (!file) return;
 
     try {
-        // Parse the Excel file
-        const studentsData = await lotteryStore.parseExcelFile(file, lotteryStore.selectedType);
+        // Parse the file (Excel or CSV)
+        const studentsData = await lotteryStore.parseStudentFile(file, lotteryStore.selectedType);
 
         if (studentsData.length === 0) {
-            alert('Excel 檔案中沒有找到有效的學生資料');
+            alert('檔案中沒有找到有效的學生資料');
             return;
         }
 
@@ -1050,7 +1291,8 @@ const handleFileUpload = async (event) => {
         // Clear the file input
         event.target.value = '';
 
-        alert(`成功匯入 ${studentsData.length} 位參與者`);
+        const fileType = file.name.split('.').pop().toUpperCase();
+        alert(`成功從 ${fileType} 檔案匯入 ${studentsData.length} 位參與者`);
     } catch (error) {
         console.error('Failed to upload file:', error);
         alert('檔案上傳失敗：' + error.message);
@@ -1382,6 +1624,178 @@ const sendWinnersEmail = async () => {
     }
 };
 
+// Send test email
+const sendTestEmail = async () => {
+    if (!selectedEventId.value) {
+        alert('請先選擇活動');
+        return;
+    }
+
+    if (!emailConfig.value.email || !emailConfig.value.password) {
+        alert('請填入郵件帳號和密碼');
+        return;
+    }
+
+    if (!emailContent.value.subject) {
+        alert('請填入郵件主旨');
+        return;
+    }
+
+    if (!testEmailList.value.trim()) {
+        alert('請填入測試收件人郵箱');
+        return;
+    }
+
+    try {
+        // Parse email list
+        const emailList = testEmailList.value.trim().split('\n')
+            .map(email => email.trim())
+            .filter(email => email && email.includes('@'));
+
+        if (emailList.length === 0) {
+            alert('請輸入至少一個有效的郵箱地址');
+            return;
+        }
+
+        // Get the appropriate HTML template based on current mode
+        let htmlTemplate;
+        let plainTextTemplate;
+
+        if (emailEditorMode.value === 'visual') {
+            htmlTemplate = generateHtmlFromVisual();
+            plainTextTemplate = generatePlainTextFromVisual();
+        } else {
+            htmlTemplate = emailContent.value.html_template;
+            plainTextTemplate = emailContent.value.body;
+        }
+
+        if (!htmlTemplate) {
+            alert('請填入郵件內容');
+            return;
+        }
+
+        const emailData = {
+            email_config: {
+                username: emailConfig.value.email,
+                password: emailConfig.value.password,
+                smtp_server: emailConfig.value.smtp_server,
+                smtp_port: emailConfig.value.smtp_port,
+                use_tls: emailConfig.value.use_tls
+            },
+            sender_name: emailConfig.value.sender_name,
+            subject: emailContent.value.subject,
+            email_template: plainTextTemplate,
+            html_template: htmlTemplate,
+            test_recipients: emailList
+        };
+
+        const result = await lotteryStore.testWinnersNotification(selectedEventId.value, emailData);
+
+        if (result && result.success) {
+            alert(`測試郵件已成功寄送到 ${emailList.length} 個收件人！`);
+            showTestEmailModal.value = false;
+        } else {
+            alert('測試郵件寄送失敗，請檢查設定或稍後再試。');
+        }
+    } catch (error) {
+        alert('測試郵件寄送失敗：' + (lotteryStore.error || error.message));
+    }
+};
+
+// Confirm delete event
+const confirmDeleteEvent = async (event) => {
+    if (confirm(`確定要刪除活動「${event.name}」嗎？此操作不可復原。`)) {
+        const result = await lotteryStore.deleteEvent(event.id);
+        if (result) {
+            alert('活動已成功刪除');
+            // Refresh the events list
+            await lotteryStore.fetchLotteryEvents(lotteryStore.selectedType);
+        } else {
+            alert('刪除失敗：' + (lotteryStore.error || '未知錯誤'));
+        }
+    }
+};
+
+// Format date for display
+const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('zh-TW', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
+
+// Get status class for styling
+const getStatusClass = (status) => {
+    const baseClass = 'event-status';
+    switch (status) {
+        case 'pending':
+            return `${baseClass} status-pending`;
+        case 'drawn':
+            return `${baseClass} status-drawn`;
+        case 'completed':
+            return `${baseClass} status-completed`;
+        default:
+            return `${baseClass} status-default`;
+    }
+};
+
+// Get status icon
+const getStatusIcon = (status) => {
+    switch (status) {
+        case 'pending':
+            return '⏳';
+        case 'drawn':
+            return '🎯';
+        case 'completed':
+            return '✅';
+        default:
+            return '📋';
+    }
+};
+
+// Get status text
+const getStatusText = (status) => {
+    switch (status) {
+        case 'pending':
+            return '待抽獎';
+        case 'drawn':
+            return '已抽獎';
+        case 'completed':
+            return '已完成';
+        default:
+            return status;
+    }
+};
+
+// Update available years from events
+const updateAvailableYears = () => {
+    const years = [...new Set(lotteryStore.lotteryEvents.map(event => 
+        event.academic_year_term.split('-')[0] // 取學年部分，例如 "112-1" -> "112"
+    ))].sort((a, b) => b - a); // 倒序排列，最新的在前
+    availableYears.value = years;
+};
+
+// Filter events by selected year
+const filterEventsByYear = () => {
+    if (!selectedYear.value) {
+        filteredEvents.value = [...lotteryStore.lotteryEvents];
+    } else {
+        filteredEvents.value = lotteryStore.lotteryEvents.filter(event => 
+            event.academic_year_term.startsWith(selectedYear.value)
+        );
+    }
+};
+
+// Initialize filtered events
+const initializeFilteredEvents = () => {
+    filteredEvents.value = [...lotteryStore.lotteryEvents];
+    updateAvailableYears();
+};
+
 // Watch for email modal opening to load template variables
 watch(showEmailModal, async (newValue) => {
     if (newValue) {
@@ -1410,8 +1824,24 @@ watch(emailEditorMode, (newMode) => {
 </script>
 
 <style scoped>
+.lottery-view {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
 .lottery-view h2 {
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
+    color: #2c3e50;
+    font-size: 2rem;
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .loading-indicator {
@@ -1460,17 +1890,58 @@ watch(emailEditorMode, (newMode) => {
     margin-bottom: 2rem;
 }
 
+.card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border: 1px solid #e9ecef;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    margin-bottom: 2rem;
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
 .section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 1.2rem 1.5rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    border-left: 5px solid #28a745;
+}
+
+.section-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
 }
 
 .header-actions {
     display: flex;
     gap: 1rem;
     align-items: center;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .section-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+    
+    .header-actions {
+        justify-content: center;
+    }
 }
 
 .btn-secondary {
@@ -1483,81 +1954,639 @@ watch(emailEditorMode, (newMode) => {
 }
 
 .btn-primary {
-    background-color: #3498db;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
     color: white;
     border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
     cursor: pointer;
-    transition: background-color 0.3s;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+    text-transform: none;
+    letter-spacing: 0.3px;
 }
 
 .btn-primary:hover {
-    background-color: #2980b9;
+    background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
 }
 
 .btn-danger {
-    background-color: #e74c3c;
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
     color: white;
     border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
     cursor: pointer;
-    transition: background-color 0.3s;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+    text-transform: none;
+    letter-spacing: 0.3px;
 }
 
 .btn-danger:hover {
-    background-color: #c0392b;
+    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
 }
 
 .btn-sm {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+    text-transform: none;
+    letter-spacing: 0.3px;
+}
+
+.btn-secondary:hover {
+    background: linear-gradient(135deg, #5a6268 0%, #495057 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(108, 117, 125, 0.4);
 }
 
 .selected-type-info {
     margin-bottom: 1.5rem;
-    padding: 1rem;
-    background-color: #e8f4f8;
-    border-radius: 4px;
-    border-left: 4px solid #3498db;
+    padding: 1.2rem 1.5rem;
+    background: linear-gradient(135deg, #e8f4f8 0%, #f0f8ff 100%);
+    border-radius: 12px;
+    border-left: 5px solid #3498db;
+    box-shadow: 0 2px 12px rgba(52, 152, 219, 0.1);
+    font-size: 1rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* 筛选区域样式 */
+.filter-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid #e9ecef;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.filter-select {
+    padding: 0.5rem 1rem;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    background: white;
+    color: #495057;
+    font-size: 0.9rem;
+    min-width: 150px;
+    transition: all 0.3s ease;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.events-count {
+    display: flex;
+    align-items: center;
+}
+
+.count-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 0.4rem 0.8rem;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+}
+
+@media (max-width: 768px) {
+    .filter-section {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+    
+    .filter-group {
+        justify-content: center;
+    }
+    
+    .events-count {
+        justify-content: center;
+    }
+}
+
+/* 抽奖动画弹窗样式 */
+.lottery-modal-overlay {
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+    z-index: 2000;
+}
+
+.lottery-modal-content {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 20px;
+    padding: 3rem;
+    max-width: 600px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.lottery-modal-content::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+    animation: rotate 10s linear infinite;
+}
+
+.lottery-stage {
+    position: relative;
+    z-index: 1;
+}
+
+.lottery-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    display: inline-block;
+}
+
+.lottery-icon.spinning {
+    animation: spin 1s linear infinite;
+}
+
+.lottery-icon.celebration {
+    animation: bounce 0.8s ease-in-out infinite alternate;
+}
+
+.lottery-stage h2 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.lottery-stage h3 {
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+    font-weight: 600;
+    color: #ffd700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 准备阶段动画 */
+.loading-dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 2rem;
+}
+
+.loading-dots span {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ffd700;
+    animation: dot-pulse 1.4s ease-in-out infinite both;
+}
+
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+/* 抽奖阶段动画 */
+.lottery-header {
+    margin-bottom: 2rem;
+}
+
+.current-prize {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.8rem 1.5rem;
+    border-radius: 25px;
+    border: 2px solid #ffd700;
+    display: inline-block;
+    margin-bottom: 1rem;
+}
+
+.numbers-container {
+    margin: 2rem 0;
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.numbers-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.animated-number {
+    background: rgba(255, 255, 255, 0.9);
+    color: #333;
+    padding: 0.8rem 1.2rem;
+    border-radius: 12px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    animation: number-flash 0.5s ease-in-out;
+    min-width: 80px;
+}
+
+.drawing-effect {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.sparkle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: #ffd700;
+    border-radius: 50%;
+    animation: sparkle 2s ease-in-out infinite;
+}
+
+.sparkle:nth-child(1) {
+    top: 20%;
+    left: 20%;
+    animation-delay: 0s;
+}
+
+.sparkle:nth-child(2) {
+    top: 30%;
+    right: 25%;
+    animation-delay: 0.5s;
+}
+
+.sparkle:nth-child(3) {
+    bottom: 30%;
+    left: 30%;
+    animation-delay: 1s;
+}
+
+.sparkle:nth-child(4) {
+    bottom: 20%;
+    right: 20%;
+    animation-delay: 1.5s;
+}
+
+/* 完成阶段 */
+.results-summary {
+    margin: 2rem 0;
+}
+
+.result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.prize-name {
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.winner-count {
+    background: #ffd700;
+    color: #333;
+    padding: 0.3rem 0.8rem;
+    border-radius: 15px;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.auto-close-hint {
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+    opacity: 0.8;
+    animation: fade-pulse 1s ease-in-out infinite alternate;
+}
+
+/* 动画关键帧 */
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes bounce {
+    from { transform: translateY(0); }
+    to { transform: translateY(-10px); }
+}
+
+@keyframes dot-pulse {
+    0%, 80%, 100% {
+        transform: scale(0);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes number-flash {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.7;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes sparkle {
+    0%, 100% {
+        opacity: 0;
+        transform: scale(0);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fade-pulse {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .lottery-modal-content {
+        padding: 2rem;
+        margin: 1rem;
+    }
+    
+    .lottery-icon {
+        font-size: 3rem;
+    }
+    
+    .lottery-stage h2 {
+        font-size: 1.5rem;
+    }
+    
+    .lottery-stage h3 {
+        font-size: 1.2rem;
+    }
+    
+    .animated-number {
+        font-size: 1rem;
+        padding: 0.6rem 1rem;
+        min-width: 60px;
+    }
+    
+    .numbers-display {
+        gap: 0.5rem;
+    }
 }
 
 .event-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1.5rem;
     margin-top: 1rem;
 }
 
 .event-item {
     border: 1px solid #e1e8ed;
-    border-radius: 12px;
-    padding: 2rem 1.5rem;
-    cursor: pointer;
+    border-radius: 16px;
+    padding: 1.5rem;
     transition: all 0.3s ease;
-    text-align: center;
     background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    min-height: 120px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 200px;
+    position: relative;
 }
 
 .event-item:hover {
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     border-color: #3498db;
     transform: translateY(-4px);
-    box-shadow: 0 8px 25px rgba(52, 152, 219, 0.2);
+    box-shadow: 0 12px 30px rgba(52, 152, 219, 0.2);
 }
 
-.event-item h4 {
-    margin: 0;
+.event-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    gap: 0.5rem;
+}
+
+.delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0.25rem;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    opacity: 0.6;
+}
+
+.delete-btn:hover {
+    background: rgba(231, 76, 60, 0.1);
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.event-content {
+    flex: 1;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.event-content h4 {
+    margin: 0 0 0.8rem 0;
     color: #2c3e50;
     font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.academic-year {
+    margin: 0.5rem 0;
+    color: #6c757d;
     font-weight: 600;
-    letter-spacing: 0.5px;
+    font-size: 1rem;
+    background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    display: inline-block;
+    border: 1px solid #bbdefb;
+}
+
+.event-description {
+    color: #8e9ba8;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    margin-top: 0.5rem;
+}
+
+/* 基础状态样式 */
+.event-status {
+    font-weight: 600;
+    padding: 0.4rem 0.9rem;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.3px;
+    border: 1px solid;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* 待抽獎状态 - 橙色系 */
+.status-pending {
+    color: #e67e22;
+    background: linear-gradient(135deg, #fef5e7 0%, #fff3cd 100%);
+    border-color: #f39c12;
+}
+
+/* 已抽獎状态 - 蓝色系 */
+.status-drawn {
+    color: #2980b9;
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-color: #3498db;
+}
+
+/* 已完成状态 - 绿色系 */
+.status-completed {
+    color: #27ae60;
+    background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+    border-color: #28a745;
+}
+
+/* 默认状态 - 灰色系 */
+.status-default {
+    color: #6c757d;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-color: #adb5bd;
+}
+
+/* 状态图标样式 */
+.status-icon {
+    font-size: 0.9rem;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+/* 悬停效果 */
+.event-status:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.event-footer {
+    text-align: center;
+    border-top: 1px solid #f1f3f4;
+    padding-top: 0.8rem;
+}
+
+.event-date {
+    color: #6c757d;
+    font-weight: 500;
+    font-size: 0.8rem;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .event-list {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+    
+    .event-item {
+        min-height: 180px;
+        padding: 1.2rem;
+    }
+    
+    .event-content h4 {
+        font-size: 1.1rem;
+    }
 }
 
 .breadcrumb {
@@ -2162,6 +3191,119 @@ watch(emailEditorMode, (newMode) => {
 .email-modal {
     max-width: 700px;
     width: 95%;
+}
+
+.test-email-modal {
+    max-width: 600px;
+    width: 95%;
+}
+
+.test-email-info {
+    background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border-left: 4px solid #2196f3;
+    margin-top: 1rem;
+}
+
+.test-email-info h5 {
+    color: #1976d2;
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.test-email-info p {
+    color: #37474f;
+    margin: 0 0 0.5rem 0;
+    font-size: 0.9rem;
+}
+
+.test-email-info ul {
+    color: #546e7a;
+    font-size: 0.85rem;
+    margin: 0;
+    padding-left: 1.5rem;
+}
+
+.test-email-info li {
+    margin-bottom: 0.25rem;
+}
+
+.btn-warning {
+    background-color: #f39c12;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.btn-warning:hover {
+    background-color: #e67e22;
+}
+
+/* 空状态样式 */
+.empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-radius: 16px;
+    border: 2px dashed #dee2e6;
+    margin: 2rem 0;
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    animation: bounce 2s infinite;
+}
+
+.empty-state h3 {
+    color: #6c757d;
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 1rem 0 0.5rem 0;
+}
+
+.empty-state p {
+    color: #8e9ba8;
+    font-size: 1rem;
+    margin-bottom: 2rem;
+    line-height: 1.5;
+}
+
+.empty-state .btn {
+    transform: scale(1.1);
+    animation: pulse 2s infinite;
+}
+
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-10px);
+    }
+    60% {
+        transform: translateY(-5px);
+    }
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(52, 152, 219, 0.6);
+    }
+    100% {
+        box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+    }
 }
 
 .email-config-section,

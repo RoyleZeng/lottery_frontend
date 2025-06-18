@@ -199,6 +199,45 @@ export const useLotteryStore = defineStore('lottery', () => {
         }
     }
 
+    // Delete lottery event (soft delete)
+    const deleteEvent = async (eventId) => {
+        loading.value = true
+        error.value = null
+
+        try {
+            const response = await api.delete(`/lottery/events/${eventId}`)
+            // Remove the event from the local list
+            const index = lotteryEvents.value.findIndex(event => event.id === eventId)
+            if (index !== -1) {
+                lotteryEvents.value.splice(index, 1)
+            }
+            return response.data.result
+        } catch (err) {
+            error.value = err.response?.data?.message || '無法刪除抽獎活動'
+            console.error('Error deleting event:', err)
+            return null
+        } finally {
+            loading.value = false
+        }
+    }
+
+    // Test winners notification with custom email list
+    const testWinnersNotification = async (eventId, emailData) => {
+        loading.value = true
+        error.value = null
+
+        try {
+            const response = await api.post(`/email/test-winners/${eventId}`, emailData)
+            return response.data.result
+        } catch (err) {
+            error.value = err.response?.data?.message || '測試郵件送信失敗'
+            console.error('Error testing winners notification:', err)
+            return null
+        } finally {
+            loading.value = false
+        }
+    }
+
     // Create a new lottery event
     const createLotteryEvent = async (eventData) => {
         loading.value = true
@@ -268,6 +307,96 @@ export const useLotteryStore = defineStore('lottery', () => {
         throw new Error('此功能暫不支援')
     }
 
+    // Helper function to parse CSV line with proper handling of quotes and commas
+    const parseCSVLine = (line) => {
+        const result = []
+        let current = ''
+        let inQuotes = false
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i]
+            
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    // Handle escaped quotes
+                    current += '"'
+                    i++ // Skip next quote
+                } else {
+                    // Toggle quote state
+                    inQuotes = !inQuotes
+                }
+            } else if (char === ',' && !inQuotes) {
+                // Field separator found
+                result.push(current.trim())
+                current = ''
+            } else {
+                current += char
+            }
+        }
+        
+        // Add the last field
+        result.push(current.trim())
+        
+        return result
+    }
+
+    // Parse CSV file and extract student data
+    const parseCsvFile = (file, eventType) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = (e) => {
+                try {
+                    const text = e.target.result
+                    const lines = text.split('\n').filter(line => line.trim() !== '')
+                    
+                    if (lines.length < 2) {
+                        reject(new Error('CSV 檔案格式不正確：至少需要標題行和一行數據'))
+                        return
+                    }
+
+                    // Parse header
+                    const headers = parseCSVLine(lines[0])
+                    
+                    // Parse data rows
+                    const students = []
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = parseCSVLine(lines[i])
+                        
+                        if (values.length !== headers.length) continue // Skip malformed rows
+                        
+                        const row = {}
+                        headers.forEach((header, index) => {
+                            row[header] = values[index]
+                        })
+
+                        const student = {
+                            id: row['學號'] || row['student_id'] || row['id'] || '',
+                            name: row['姓名'] || row['name'] || null,
+                            department: row['系所'] || row['department'] || null,
+                            grade: row['年級'] || row['grade'] || null
+                        }
+
+                        // Add final_teaching specific fields
+                        if (eventType === 'final_teaching') {
+                            student.required_surveys = row['應填問卷數'] || row['required_surveys'] || null
+                            student.completed_surveys = row['已填問卷數'] || row['completed_surveys'] || null
+                            student.surveys_completed = row['是否填畢'] || row['surveys_completed'] || null
+                            student.valid_surveys = row['有效問卷'] || row['valid_surveys'] || null
+                        }
+
+                        students.push(student)
+                    }
+
+                    resolve(students)
+                } catch (error) {
+                    reject(new Error('CSV 檔案解析失敗：' + error.message))
+                }
+            }
+            reader.onerror = () => reject(new Error('檔案讀取失敗'))
+            reader.readAsText(file, 'UTF-8')
+        })
+    }
+
     // Parse Excel file and extract student data
     const parseExcelFile = (file, eventType) => {
         return new Promise((resolve, reject) => {
@@ -307,6 +436,19 @@ export const useLotteryStore = defineStore('lottery', () => {
             reader.onerror = () => reject(new Error('檔案讀取失敗'))
             reader.readAsArrayBuffer(file)
         })
+    }
+
+    // Parse file (both Excel and CSV)
+    const parseStudentFile = (file, eventType) => {
+        const fileExtension = file.name.split('.').pop().toLowerCase()
+        
+        if (fileExtension === 'csv') {
+            return parseCsvFile(file, eventType)
+        } else if (['xlsx', 'xls'].includes(fileExtension)) {
+            return parseExcelFile(file, eventType)
+        } else {
+            return Promise.reject(new Error('不支援的檔案格式，請上傳 Excel (.xlsx, .xls) 或 CSV (.csv) 檔案'))
+        }
     }
 
     // Email related state
@@ -373,7 +515,11 @@ export const useLotteryStore = defineStore('lottery', () => {
         deleteAllParticipants,
         deleteParticipant,
         parseExcelFile,
+        parseCsvFile,
+        parseStudentFile,
         fetchEmailTemplateVariables,
-        sendWinnersNotification
+        sendWinnersNotification,
+        deleteEvent,
+        testWinnersNotification
     }
 }) 

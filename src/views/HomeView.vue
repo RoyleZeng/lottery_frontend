@@ -2,6 +2,9 @@
     <div class="home">
         <h2>抽獎系統首頁</h2>
 
+        <!-- 开发环境显示环境信息 -->
+        <EnvironmentInfo v-if="isDevelopment" />
+
         <div class="welcome-section card">
             <h3>歡迎使用抽獎系統</h3>
             <p>本系統提供以下功能：</p>
@@ -47,9 +50,19 @@
 </template>
 
 <script setup>
-import { useAuthStore } from '../stores/auth';
+import { computed } from 'vue'
+import { useAuthStore } from '../stores/auth'
+import EnvironmentInfo from '../components/EnvironmentInfo.vue'
 
-const authStore = useAuthStore();
+const authStore = useAuthStore()
+// 只在开发环境显示环境信息
+const isDevelopment = computed(() => {
+    // 严格检查：必须是开发模式且在localhost
+    return import.meta.env.DEV &&
+        (window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1' ||
+            window.location.hostname === '0.0.0.0')
+})
 </script>
 
 <style scoped>
