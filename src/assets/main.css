@@ -125,6 +125,50 @@ tr:nth-child(even) {
     color: #155724;
 }
 
+/* Field categories styles */
+.field-categories {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.visible-fields, .hidden-fields {
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+
+.visible-fields {
+    background-color: #f8f9fa;
+    border-color: #28a745;
+}
+
+.hidden-fields {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+}
+
+.visible-fields h6, .hidden-fields h6 {
+    margin: 0 0 8px 0;
+    font-weight: bold;
+    color: #495057;
+}
+
+.visible-fields h6 {
+    color: #28a745;
+}
+
+.hidden-fields h6 {
+    color: #856404;
+}
+
+.privacy-note {
+    display: block;
+    margin-top: 8px;
+    color: #856404;
+    font-style: italic;
+}
+
 /* CSV example styles */
 .csv-example {
     background-color: #f8f9fa;

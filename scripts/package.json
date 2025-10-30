@@ -1,0 +1,21 @@
+{
+  "name": "survey-data-converter",
+  "version": "1.0.0",
+  "description": "转换原始问卷数据为抽奖系统格式",
+  "main": "convert-survey-data.js",
+  "scripts": {
+    "convert": "node convert-survey-data.js",
+    "install-deps": "npm install"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "keywords": [
+    "excel",
+    "survey",
+    "lottery",
+    "data-conversion"
+  ],
+  "author": "",
+  "license": "MIT"
+} 

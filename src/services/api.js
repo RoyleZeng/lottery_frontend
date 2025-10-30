@@ -39,24 +39,65 @@ console.log('  - API Base URL:', apiBaseUrl)
 // Create axios instance with default config
 const api = axios.create({
     baseURL: apiBaseUrl,
-    timeout: 10000,
+    timeout: 60000, // Extended to 1 minute for file upload and processing
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
     }
 })
 
+// Add debug logging for axios instance creation
+console.log('🚀 Axios instance created:')
+console.log('  - Base URL:', apiBaseUrl)
+console.log('  - Interceptors count:', api.interceptors.request.handlers.length)
+
+// Also set default Authorization header as fallback
+const updateDefaultHeaders = () => {
+    const token = localStorage.getItem('token')
+    if (token) {
+        api.defaults.headers.common['Authorization'] = token
+        console.log('🔧 Default Authorization header updated (no Bearer prefix)')
+    } else {
+        delete api.defaults.headers.common['Authorization']
+        console.log('🗑️ Default Authorization header removed')
+    }
+}
+
+// Update default headers on initial load
+updateDefaultHeaders()
+
+// Export the update function for manual refresh
+window.updateApiHeaders = updateDefaultHeaders
+
 // Request interceptor
 api.interceptors.request.use(
     config => {
         // Get token from localStorage
         const token = localStorage.getItem('token')
+        console.log('🔐 Request Interceptor:')
+        console.log('  - Token exists:', !!token)
+        console.log('  - Token length:', token ? token.length : 0)
+        console.log('  - Request URL:', config.url)
+        console.log('  - Request method:', config.method)
+        console.log('  - Original headers:', JSON.stringify(config.headers, null, 2))
+        
         if (token) {
-            config.headers['Authorization'] = `Bearer ${token}`
+            // Set Authorization header directly with token (no "Bearer " prefix)
+            config.headers['Authorization'] = token
+            config.headers.Authorization = token
+            if (!config.headers.common) config.headers.common = {}
+            config.headers.common['Authorization'] = token
+            
+            console.log('  - Authorization header added (no Bearer prefix):', token.substring(0, 30) + '...')
+            console.log('  - Final headers:', JSON.stringify(config.headers, null, 2))
+        } else {
+            console.log('  - No token found, Authorization header NOT added')
         }
+        
         return config
     },
     error => {
+        console.error('Request interceptor error:', error)
         return Promise.reject(error)
     }
 )

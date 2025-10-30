@@ -31,7 +31,7 @@
             <div class="section-header">
                 <h3>選擇抽獎活動</h3>
                 <div class="header-actions">
-                    <button class="btn btn-primary" @click="showCreateEventModal = true">
+                    <button class="btn btn-primary" @click="openCreateEventModal">
                         新增活動
                     </button>
                     <button class="btn btn-secondary" @click="goBackToTypes">
@@ -62,7 +62,7 @@
                 <div class="empty-icon">🎯</div>
                 <h3>目前沒有抽獎活動</h3>
                 <p>請新增一個活動開始使用抽獎系統</p>
-                <button class="btn btn-primary" @click="showCreateEventModal = true">
+                <button class="btn btn-primary" @click="openCreateEventModal">
                     <span>📝</span> 立即新增活動
                 </button>
             </div>
@@ -74,18 +74,24 @@
                             <span class="status-icon">{{ getStatusIcon(event.status) }}</span>
                             {{ getStatusText(event.status) }}
                         </span>
-                        <button class="delete-btn" @click.stop="confirmDeleteEvent(event)"
-                            :disabled="lotteryStore.loading" title="刪除活動">
-                            🗑️
-                        </button>
+                        <div class="event-actions">
+                            <button class="edit-btn" @click.stop="openEditEventModal(event)"
+                                :disabled="lotteryStore.loading" title="編輯活動">
+                                ✏️
+                            </button>
+                            <button class="delete-btn" @click.stop="confirmDeleteEvent(event)"
+                                :disabled="lotteryStore.loading" title="刪除活動">
+                                🗑️
+                            </button>
+                        </div>
                     </div>
-                    
+
                     <div class="event-content">
                         <h4>{{ event.name }}</h4>
                         <p class="academic-year">{{ event.academic_year_term }}</p>
                         <small class="event-description">{{ event.description }}</small>
                     </div>
-                    
+
                     <div class="event-footer">
                         <span class="event-date">{{ formatDate(event.event_date) }}</span>
                     </div>
@@ -94,8 +100,8 @@
         </div>
 
         <!-- Create Event Modal -->
-        <div v-if="showCreateEventModal" class="modal-overlay" @click="closeCreateEventModal">
-            <div class="modal-content" @click.stop>
+        <div v-if="showCreateEventModal" class="modal-overlay" @click="handleCreateModalBackgroundClick">
+            <div class="modal-content create-event-modal" @click.stop>
                 <div class="modal-header">
                     <h3>新增抽獎活動</h3>
                     <button class="modal-close" @click="closeCreateEventModal">×</button>
@@ -115,8 +121,8 @@
 
                         <div class="form-group">
                             <label for="event-description" class="form-label">活動描述</label>
-                            <textarea id="event-description" v-model="newEvent.description" class="form-control"
-                                rows="3" required></textarea>
+                            <textarea ref="descriptionTextarea" id="event-description" v-model="newEvent.description"
+                                class="form-control" rows="3" required></textarea>
                         </div>
 
                         <div class="form-group">
@@ -139,6 +145,60 @@
                             </button>
                             <button type="submit" class="btn btn-primary" :disabled="lotteryStore.loading">
                                 建立活動
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Event Modal -->
+        <div v-if="showEditEventModal" class="modal-overlay" @click="handleEditModalBackgroundClick">
+            <div class="modal-content edit-event-modal" @click.stop>
+                <div class="modal-header">
+                    <h3>編輯抽獎活動</h3>
+                    <button class="modal-close" @click="closeEditEventModal">×</button>
+                </div>
+                <div class="modal-body">
+                    <form @submit.prevent="updateEvent">
+                        <div class="form-group">
+                            <label for="edit-event-name" class="form-label">活動名稱</label>
+                            <input type="text" id="edit-event-name" v-model="editEvent.name" class="form-control"
+                                required />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="edit-academic-year-term" class="form-label">學年學期</label>
+                            <input type="text" id="edit-academic-year-term" v-model="editEvent.academic_year_term"
+                                class="form-control" placeholder="例如：112-1" required />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="edit-event-description" class="form-label">活動描述</label>
+                            <textarea id="edit-event-description" v-model="editEvent.description" class="form-control"
+                                rows="3" required></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="edit-event-date" class="form-label">活動日期</label>
+                            <input type="datetime-local" id="edit-event-date" v-model="editEvent.event_date"
+                                class="form-control" required />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="edit-event-type" class="form-label">活動類型</label>
+                            <select id="edit-event-type" v-model="editEvent.type" class="form-control" required>
+                                <option value="general">學生學習問卷抽獎</option>
+                                <option value="final_teaching">期末評量抽獎</option>
+                            </select>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" @click="closeEditEventModal">
+                                取消
+                            </button>
+                            <button type="submit" class="btn btn-primary" :disabled="lotteryStore.loading">
+                                更新活動
                             </button>
                         </div>
                     </form>
@@ -203,7 +263,6 @@
                                     <th v-for="column in getDisplayColumns()" :key="column.key">
                                         {{ column.label }}
                                     </th>
-                                    <th>操作</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -211,17 +270,12 @@
                                     <td>{{ index + 1 }}</td>
                                     <td v-for="column in getDisplayColumns()" :key="`${index}-${column.key}`">
                                         <span v-if="column.type === 'boolean'">
-                                            <span v-if="participant[column.key]" class="check-icon">✓</span>
+                                            <span
+                                                v-if="participant[column.key] === true || participant[column.key] === 'Y'"
+                                                class="check-icon">✓</span>
                                             <span v-else class="cross-icon">✗</span>
                                         </span>
                                         <span v-else>{{ participant[column.key] || '-' }}</span>
-                                    </td>
-                                    <td>
-                                        <button class="btn btn-sm btn-danger"
-                                            @click="confirmDeleteParticipant(participant.id)"
-                                            :disabled="lotteryStore.loading">
-                                            刪除
-                                        </button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -237,55 +291,57 @@
                         </div>
                     </div>
 
-                    <!-- File Upload Instructions -->
+                    <!-- Upload Instructions -->
                     <div class="upload-instructions">
-                        <h4>檔案格式說明</h4>
+                        <h4>📋 檔案上傳說明</h4>
                         <div class="format-info">
                             <div class="format-section">
-                                <h5>支援的檔案格式：</h5>
+                                <h5>📊 學生學習問卷抽獎 欄位格式</h5>
                                 <ul>
-                                    <li>Excel 檔案 (.xlsx, .xls)</li>
-                                    <li>CSV 檔案 (.csv) - 建議使用 UTF-8 編碼</li>
+                                    <li><strong>student_id:</strong> 學號</li>
+                                    <li><strong>name:</strong> 姓名</li>
+                                    <li><strong>department:</strong> 系所</li>
+                                    <li><strong>grade:</strong> 年級</li>
                                 </ul>
+                                <div class="download-sample">
+                                    <button class="btn btn-outline-primary btn-sm"
+                                        @click="downloadSampleCSV('general')">
+                                        📥 下載範例檔案
+                                    </button>
+                                </div>
                             </div>
                             <div class="format-section">
-                                <h5>學生學習問卷抽獎 (general) 必要欄位：</h5>
+                                <h5>📋 期末評量抽獎 欄位格式</h5>
                                 <ul>
-                                    <li>學號 (student_id 或 id)</li>
-                                    <li>姓名 (name) - 可選</li>
-                                    <li>系所 (department) - 可選</li>
-                                    <li>年級 (grade) - 可選</li>
+                                    <li><strong>student_id:</strong> 學號</li>
+                                    <li><strong>name:</strong> 姓名</li>
+                                    <li><strong>department:</strong> 系所</li>
+                                    <li><strong>grade:</strong> 年級</li>
+                                    <li><strong>required_surveys:</strong> 應填問卷數</li>
+                                    <li><strong>completed_surveys:</strong> 已填問卷數</li>
+                                    <li><strong>surveys_completed:</strong> 是否填畢 (Y/N)</li>
+                                    <li><strong>valid_surveys:</strong> 有效問卷 (Y/N)</li>
                                 </ul>
-                            </div>
-                            <div class="format-section">
-                                <h5>期末評量抽獎 (final_teaching) 額外欄位：</h5>
-                                <ul>
-                                    <li>應填問卷數 (required_surveys)</li>
-                                    <li>已填問卷數 (completed_surveys)</li>
-                                    <li>是否填畢 (surveys_completed)</li>
-                                    <li>有效問卷 (valid_surveys)</li>
-                                </ul>
-                            </div>
-                            <div class="format-section">
-                                <h5>CSV 檔案格式範例：</h5>
-                                <div class="csv-example">
-                                    <p><strong>基本格式：</strong></p>
-                                    <code>學號,姓名,系所,年級<br>S1234567,王小明,資訊工程學系,大三</code>
-                                    <br><br>
-                                    <p><strong>期末評量格式：</strong></p>
-                                    <code>學號,姓名,系所,年級,應填問卷數,已填問卷數,是否填畢,有效問卷<br>S1234567,王小明,資訊工程學系,大三,5,5,是,是</code>
-                                    <br><br>
-                                    <div class="sample-download">
-                                        <p><strong>範例檔案下載：</strong></p>
-                                        <a href="/sample_students.csv" download="學生名單範例.csv"
-                                            class="btn btn-secondary">下載基本格式範例</a>
-                                        <a href="/sample_students_final.csv" download="期末評量學生名單範例.csv"
-                                            class="btn btn-secondary">下載期末評量格式範例</a>
-                                    </div>
+                                <div class="download-sample">
+                                    <button class="btn btn-outline-primary btn-sm"
+                                        @click="downloadSampleCSV('final_teaching')">
+                                        📥 下載範例檔案
+                                    </button>
                                 </div>
                             </div>
                         </div>
+                        <div class="format-notes">
+                            <p><strong>💡 上傳提示：</strong></p>
+                            <ul>
+                                <li>支援 Excel (.xlsx, .xls) 和 CSV (.csv) 格式</li>
+                                <li>請確保第一行為欄位標題</li>
+                                <li>欄位名稱請使用英文，如上方格式所示</li>
+                                <li>布林值欄位請使用 Y/N 或 true/false</li>
+                            </ul>
+                        </div>
                     </div>
+
+
                 </div>
 
                 <!-- Prizes Tab -->
@@ -395,7 +451,8 @@
                                                 <td v-for="column in getDisplayColumns()"
                                                     :key="`${winnerIndex}-${column.key}`">
                                                     <span v-if="column.type === 'boolean'">
-                                                        <span v-if="getParticipantData(winner)[column.key]"
+                                                        <span
+                                                            v-if="getParticipantData(winner)[column.key] === true || getParticipantData(winner)[column.key] === 'Y'"
                                                             class="check-icon">✓</span>
                                                         <span v-else class="cross-icon">✗</span>
                                                     </span>
@@ -466,7 +523,8 @@
                                             <td v-for="column in getDisplayColumns()"
                                                 :key="`${winnerIndex}-${column.key}`">
                                                 <span v-if="column.type === 'boolean'">
-                                                    <span v-if="getParticipantData(winner)[column.key]"
+                                                    <span
+                                                        v-if="getParticipantData(winner)[column.key] === true || getParticipantData(winner)[column.key] === 'Y'"
                                                         class="check-icon">✓</span>
                                                     <span v-else class="cross-icon">✗</span>
                                                 </span>
@@ -481,327 +539,378 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
 
-                    <!-- Email Modal -->
-                    <div v-if="showEmailModal" class="modal-overlay" @click="showEmailModal = false">
-                        <div class="modal-content email-modal" @click.stop>
-                            <div class="modal-header">
-                                <h4>寄送得獎通知</h4>
-                                <button class="close-btn" @click="showEmailModal = false">×</button>
-                            </div>
-
-                            <div class="modal-body">
-                                <form @submit.prevent="sendWinnersEmail">
-                                    <!-- Email Configuration -->
-                                    <div class="email-config-section">
-                                        <h5>📧 郵件設定</h5>
-                                        <div class="form-group">
-                                            <label class="form-label">發送郵件帳號</label>
-                                            <input type="email" v-model="emailConfig.email" class="form-control"
-                                                placeholder="請輸入您的郵件帳號" required>
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="form-label">郵件密碼</label>
-                                            <input type="password" v-model="emailConfig.password" class="form-control"
-                                                placeholder="請輸入郵件密碼" required>
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="form-label">寄件人名稱</label>
-                                            <input type="text" v-model="emailConfig.sender_name" class="form-control"
-                                                placeholder="請輸入寄件人名稱" required>
-                                        </div>
-                                        <div class="server-info">
-                                            <small class="text-muted">
-                                                <i class="info-icon">ℹ️</i>
-                                                系統將使用校內郵件伺服器 (dragon.nchu.edu.tw) 進行發送
-                                            </small>
-                                        </div>
-                                    </div>
-
-                                    <!-- Email Content -->
-                                    <div class="email-content-section">
-                                        <h5>✉️ 郵件內容</h5>
-
-                                        <!-- Email Subject -->
-                                        <div class="form-group">
-                                            <label class="form-label">主旨</label>
-                                            <input type="text" v-model="emailContent.subject" class="form-control"
-                                                placeholder="恭喜您中獎了！" required>
-                                        </div>
-
-                                        <!-- Email Editor Mode Toggle -->
-                                        <div class="editor-mode-toggle">
-                                            <div class="toggle-buttons">
-                                                <button type="button" class="toggle-btn"
-                                                    :class="{ active: emailEditorMode === 'visual' }"
-                                                    @click="emailEditorMode = 'visual'">
-                                                    📝 視覺編輯器
-                                                </button>
-                                                <button type="button" class="toggle-btn"
-                                                    :class="{ active: emailEditorMode === 'html' }"
-                                                    @click="emailEditorMode = 'html'">
-                                                    💻 HTML 編輯器
-                                                </button>
-                                            </div>
-                                            <button type="button" class="btn btn-sm btn-secondary"
-                                                @click="previewEmail">
-                                                👁️ 預覽
-                                            </button>
-                                        </div>
-
-                                        <!-- Visual Editor Mode -->
-                                        <div v-if="emailEditorMode === 'visual'" class="visual-editor">
-                                            <!-- Template Variables -->
-                                            <div class="template-variables">
-                                                <div class="variables-header">
-                                                    <span class="variables-title">🏷️ 可用變數</span>
-                                                    <small class="variables-hint">
-                                                        點擊變數即可插入到
-                                                        <span class="current-field-indicator">{{ getCurrentFieldLabel()
-                                                            }}</span>
-                                                    </small>
-                                                </div>
-                                                <div class="variables-grid">
-                                                    <div v-for="variable in templateVariables" :key="variable.key"
-                                                        class="variable-card"
-                                                        @click="insertVariableToVisual(variable.key)"
-                                                        :title="variable.description">
-                                                        <div class="variable-icon">{{ variable.icon }}</div>
-                                                        <div class="variable-label">{{ variable.label }}</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Visual Content Editor -->
-                                            <div class="visual-content-editor">
-                                                <div class="form-group">
-                                                    <label class="form-label">開頭問候語</label>
-                                                    <textarea v-model="visualContent.greeting"
-                                                        class="form-control visual-textarea"
-                                                        placeholder="親愛的 {{winner_name}}，" rows="2"
-                                                        @focus="currentFocusedField = 'greeting'"
-                                                        @blur="currentFocusedField = 'greeting'"></textarea>
-                                                </div>
-
-                                                <div class="form-group">
-                                                    <label class="form-label">中獎通知內容</label>
-                                                    <textarea v-model="visualContent.announcement"
-                                                        class="form-control visual-textarea"
-                                                        placeholder="恭喜您在「{{event_name}}」抽獎活動中獲得獎項！" rows="3"
-                                                        @focus="currentFocusedField = 'announcement'"
-                                                        @blur="currentFocusedField = 'announcement'"></textarea>
-                                                </div>
-
-                                                <div class="form-group">
-                                                    <label class="form-label">獎項說明</label>
-                                                    <textarea v-model="visualContent.prizeDescription"
-                                                        class="form-control visual-textarea"
-                                                        placeholder="您獲得的獎項是：{{prize_name}}" rows="2"
-                                                        @focus="currentFocusedField = 'prizeDescription'"
-                                                        @blur="currentFocusedField = 'prizeDescription'"></textarea>
-                                                </div>
-
-                                                <div class="form-group">
-                                                    <label class="form-label">領獎說明</label>
-                                                    <textarea v-model="visualContent.instructions"
-                                                        class="form-control visual-textarea"
-                                                        placeholder="請依照相關規定領取您的獎品。" rows="3"
-                                                        @focus="currentFocusedField = 'instructions'"
-                                                        @blur="currentFocusedField = 'instructions'"></textarea>
-                                                </div>
-
-                                                <div class="form-group">
-                                                    <label class="form-label">結尾祝福語</label>
-                                                    <textarea v-model="visualContent.closing"
-                                                        class="form-control visual-textarea" placeholder="祝您身體健康，學業進步！"
-                                                        rows="2" @focus="currentFocusedField = 'closing'"
-                                                        @blur="currentFocusedField = 'closing'"></textarea>
-                                                </div>
-
-                                                <div class="form-group">
-                                                    <label class="form-label">署名</label>
-                                                    <input type="text" v-model="visualContent.signature"
-                                                        class="form-control" placeholder="{{sender_name}}"
-                                                        @focus="currentFocusedField = 'signature'"
-                                                        @blur="currentFocusedField = 'signature'">
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- HTML Editor Mode -->
-                                        <div v-if="emailEditorMode === 'html'" class="html-editor">
-                                            <!-- Template Variables for HTML -->
-                                            <div class="template-variables">
-                                                <div class="variables-header">
-                                                    <span class="variables-title">🏷️ 可用變數</span>
-                                                    <small class="variables-hint">點擊變數即可插入到HTML模板中</small>
-                                                </div>
-                                                <div class="variables-grid">
-                                                    <div v-for="variable in templateVariables" :key="variable.key"
-                                                        class="variable-card"
-                                                        @click="insertVariableToHtml(variable.key)"
-                                                        :title="variable.description">
-                                                        <div class="variable-icon">{{ variable.icon }}</div>
-                                                        <div class="variable-label">{{ variable.label }}</div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div class="form-group">
-                                                <label class="form-label">HTML 郵件模板</label>
-                                                <textarea v-model="emailContent.html_template"
-                                                    class="form-control html-template-textarea"
-                                                    placeholder="請輸入HTML郵件模板..." rows="15" required></textarea>
-                                            </div>
-                                        </div>
-
-                                        <!-- Plain Text Fallback -->
-                                        <div class="form-group">
-                                            <label class="form-label">純文字內容 (自動生成)</label>
-                                            <textarea v-model="emailContent.body" class="form-control email-textarea"
-                                                placeholder="純文字版本將根據上方內容自動生成" rows="4" readonly></textarea>
-                                            <small class="text-muted">當收件人不支援HTML郵件時使用，會自動根據上方內容生成</small>
-                                        </div>
-                                    </div>
-
-                                    <div class="modal-actions">
-                                        <button type="button" class="btn btn-secondary" @click="showEmailModal = false">
-                                            取消
-                                        </button>
-                                        <button type="button" class="btn btn-warning" @click="showTestEmailModal = true">
-                                            測試寄送
-                                        </button>
-                                        <button type="submit" class="btn btn-primary" :disabled="lotteryStore.loading">
-                                            {{ lotteryStore.loading ? '寄送中...' : '寄送郵件' }}
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
+            <!-- Preview Modal -->
+            <div v-if="showPreviewModal" class="modal-overlay" @click="handlePreviewModalOverlayClick">
+                <div class="modal-content preview-modal" @click.stop>
+                    <div class="modal-header">
+                        <h4>📧 郵件預覽</h4>
+                        <button class="close-btn" @click="showPreviewModal = false">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="preview-container">
+                            <div class="preview-frame" v-html="previewContent"></div>
                         </div>
                     </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" @click="showPreviewModal = false">
+                            關閉預覽
+                        </button>
+                    </div>
+                </div>
+            </div>
 
-                    <!-- Preview Modal -->
-                    <div v-if="showPreviewModal" class="modal-overlay" @click="showPreviewModal = false">
-                        <div class="modal-content preview-modal" @click.stop>
-                            <div class="modal-header">
-                                <h4>📧 郵件預覽</h4>
-                                <button class="close-btn" @click="showPreviewModal = false">×</button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="preview-container">
-                                    <div class="preview-frame" v-html="previewContent"></div>
-                                </div>
-                            </div>
-                            <div class="modal-actions">
-                                <button type="button" class="btn btn-secondary" @click="showPreviewModal = false">
-                                    關閉預覽
-                                </button>
-                            </div>
+            <!-- Test Email Modal -->
+            <div v-if="showTestEmailModal" class="modal-overlay" @click="handleTestModalOverlayClick">
+                <div class="modal-content test-email-modal" @click.stop>
+                    <div class="modal-header">
+                        <h4>🧪 測試郵件寄送</h4>
+                        <button class="close-btn" @click="showTestEmailModal = false">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>輸入測試收件人的郵箱地址，系統將使用虛擬中獎者資料發送測試郵件：</p>
+
+                        <div class="form-group">
+                            <label class="form-label">測試收件人郵箱 (一行一個)</label>
+                            <textarea v-model="testEmailList" class="form-control" rows="5"
+                                placeholder="請輸入測試郵箱地址，一行一個：&#10;test1@example.com&#10;test2@example.com&#10;admin@company.com"></textarea>
+                            <small class="form-text">請輸入有效的郵箱地址，一行一個</small>
+                        </div>
+
+                        <div class="test-email-info">
+                            <h5>📋 測試資料說明</h5>
+                            <p>系統將使用以下虛擬資料發送測試郵件：</p>
+                            <ul>
+                                <li><strong>得獎人姓名：</strong>測試用戶</li>
+                                <li><strong>學號：</strong>TEST001</li>
+                                <li><strong>系所：</strong>測試系所</li>
+                                <li><strong>年級：</strong>測試年級</li>
+                                <li><strong>獎項：</strong>測試獎品</li>
+                            </ul>
                         </div>
                     </div>
-
-                    <!-- Test Email Modal -->
-                    <div v-if="showTestEmailModal" class="modal-overlay" @click="showTestEmailModal = false">
-                        <div class="modal-content test-email-modal" @click.stop>
-                            <div class="modal-header">
-                                <h4>🧪 測試郵件寄送</h4>
-                                <button class="close-btn" @click="showTestEmailModal = false">×</button>
-                            </div>
-                            <div class="modal-body">
-                                <p>輸入測試收件人的郵箱地址，系統將使用虛擬中獎者資料發送測試郵件：</p>
-                                
-                                <div class="form-group">
-                                    <label class="form-label">測試收件人郵箱 (一行一個)</label>
-                                    <textarea v-model="testEmailList" class="form-control" rows="5" 
-                                        placeholder="請輸入測試郵箱地址，一行一個：&#10;test1@example.com&#10;test2@example.com&#10;admin@company.com"></textarea>
-                                    <small class="form-text">請輸入有效的郵箱地址，一行一個</small>
-                                </div>
-
-                                <div class="test-email-info">
-                                    <h5>📋 測試資料說明</h5>
-                                    <p>系統將使用以下虛擬資料發送測試郵件：</p>
-                                    <ul>
-                                        <li><strong>得獎人姓名：</strong>測試用戶</li>
-                                        <li><strong>學號：</strong>TEST001</li>
-                                        <li><strong>系所：</strong>測試系所</li>
-                                        <li><strong>年級：</strong>測試年級</li>
-                                        <li><strong>獎項：</strong>測試獎品</li>
-                                    </ul>
-                                </div>
-                            </div>
-                            <div class="modal-actions">
-                                <button type="button" class="btn btn-secondary" @click="showTestEmailModal = false">
-                                    取消
-                                </button>
-                                <button type="button" class="btn btn-primary" @click="sendTestEmail" 
-                                    :disabled="lotteryStore.loading || !testEmailList.trim()">
-                                    {{ lotteryStore.loading ? '寄送中...' : '發送測試郵件' }}
-                                </button>
-                            </div>
-                        </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" @click="showTestEmailModal = false">
+                            取消
+                        </button>
+                        <button type="button" class="btn btn-primary" @click="sendTestEmail"
+                            :disabled="lotteryStore.loading || !testEmailList.trim()">
+                            {{ lotteryStore.loading ? '寄送中...' : '發送測試郵件' }}
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Lottery Animation Modal -->
-        <div v-if="showLotteryModal" class="modal-overlay lottery-modal-overlay">
-            <div class="lottery-modal-content" @click.stop>
-                <!-- Preparing Stage -->
-                <div v-if="lotteryAnimationStage === 'preparing'" class="lottery-stage preparing-stage">
-                    <div class="lottery-icon">🎲</div>
-                    <h2>準備抽獎中...</h2>
-                    <div class="loading-dots">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
-                </div>
+    <!-- Email Modal - 全屏显示 -->
+    <div v-if="showEmailModal" class="modal-overlay" @click="handleModalOverlayClick">
+        <div class="modal-content email-modal" @click.stop>
+            <div class="modal-header">
+                <h4>寄送得獎通知</h4>
+                <button class="close-btn" @click="showEmailModal = false">×</button>
+            </div>
 
-                <!-- Drawing Stage -->
-                <div v-if="lotteryAnimationStage === 'drawing'" class="lottery-stage drawing-stage">
-                    <div class="lottery-header">
-                        <div class="lottery-icon spinning">🎯</div>
-                        <h2>正在抽取獎項</h2>
-                        <h3 class="current-prize">{{ currentPrize }}</h3>
+            <div class="modal-body">
+                <form @submit.prevent="sendWinnersEmail">
+                    <!-- Email Configuration (移到最上面，不折叠) -->
+                    <div class="email-config-section">
+                        <h5>📧 郵件設定</h5>
+
+                        <div class="form-group">
+                            <label class="form-label">發送郵件帳號</label>
+                            <input type="email" v-model="emailConfig.email" class="form-control" placeholder="請輸入您的郵件帳號"
+                                required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">郵件密碼</label>
+                            <input type="password" v-model="emailConfig.password" class="form-control"
+                                placeholder="請輸入郵件密碼" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">寄件人名稱</label>
+                            <input type="text" v-model="emailConfig.sender_name" class="form-control"
+                                placeholder="請輸入寄件人名稱" required>
+                        </div>
+                        <div class="server-info">
+                            <small class="text-muted">
+                                <i class="info-icon">ℹ️</i>
+                                系統將使用校內郵件伺服器 (dragon.nchu.edu.tw) 進行發送
+                            </small>
+                        </div>
                     </div>
-                    
-                    <div class="numbers-container">
-                        <div class="numbers-display">
-                            <div v-for="(number, index) in animatedNumbers" :key="index" 
-                                 class="animated-number">
-                                {{ number }}
+
+                    <!-- Email Content -->
+                    <div class="email-content-section">
+                        <h5>✉️ 郵件內容</h5>
+
+                        <!-- Email Subject -->
+                        <div class="form-group">
+                            <label class="form-label">主旨</label>
+                            <input type="text" v-model="emailContent.subject" class="form-control" placeholder="恭喜您中獎了！"
+                                required>
+                        </div>
+
+                        <!-- Email Editor Mode Toggle -->
+                        <div class="editor-mode-toggle">
+                            <div class="toggle-buttons">
+                                <button type="button" class="toggle-btn"
+                                    :class="{ active: emailEditorMode === 'visual' }"
+                                    @click="emailEditorMode = 'visual'">
+                                    📝 視覺編輯器
+                                </button>
+                                <button type="button" class="toggle-btn" :class="{ active: emailEditorMode === 'html' }"
+                                    @click="emailEditorMode = 'html'">
+                                    💻 HTML 編輯器
+                                </button>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-secondary" @click="previewEmail">
+                                👁️ 預覽
+                            </button>
+                        </div>
+
+                        <!-- Visual Editor Mode -->
+                        <div v-if="emailEditorMode === 'visual'" class="visual-editor">
+                            <!-- Template Variables -->
+                            <div class="template-variables">
+                                <div class="variables-header">
+                                    <span class="variables-title">🏷️ 可用變數</span>
+                                    <small class="variables-hint">
+                                        點擊變數即可插入到
+                                        <span class="current-field-indicator">{{ getCurrentFieldLabel()
+                                            }}</span>
+                                    </small>
+                                </div>
+                                <div class="variables-grid">
+                                    <div v-for="variable in templateVariables" :key="variable.key" class="variable-card"
+                                        @click="insertVariableToVisual(variable.key)" :title="variable.description">
+                                        <div class="variable-icon">{{ variable.icon }}</div>
+                                        <div class="variable-label">{{ variable.label }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Visual Content Editor -->
+                            <div class="visual-content-editor">
+                                <div class="form-group">
+                                    <label class="form-label">開頭問候語</label>
+                                    <textarea v-model="visualContent.greeting" class="form-control visual-textarea"
+                                        placeholder="親愛的 {{winner_name}}，" rows="2"
+                                        @focus="currentFocusedField = 'greeting'"
+                                        @blur="currentFocusedField = 'greeting'"></textarea>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">中獎通知內容</label>
+                                    <textarea v-model="visualContent.announcement" class="form-control visual-textarea"
+                                        placeholder="恭喜您在「{{event_name}}」抽獎活動中獲得獎項！" rows="3"
+                                        @focus="currentFocusedField = 'announcement'"
+                                        @blur="currentFocusedField = 'announcement'"></textarea>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">獎項說明</label>
+                                    <textarea v-model="visualContent.prizeDescription"
+                                        class="form-control visual-textarea" placeholder="您獲得的獎項是：{{prize_name}}"
+                                        rows="2" @focus="currentFocusedField = 'prizeDescription'"
+                                        @blur="currentFocusedField = 'prizeDescription'"></textarea>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">領獎說明</label>
+                                    <textarea v-model="visualContent.instructions" class="form-control visual-textarea"
+                                        placeholder="請依照相關規定領取您的獎品。" rows="3"
+                                        @focus="currentFocusedField = 'instructions'"
+                                        @blur="currentFocusedField = 'instructions'"></textarea>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">結尾祝福語</label>
+                                    <textarea v-model="visualContent.closing" class="form-control visual-textarea"
+                                        placeholder="祝您身體健康，學業進步！" rows="2" @focus="currentFocusedField = 'closing'"
+                                        @blur="currentFocusedField = 'closing'"></textarea>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">署名</label>
+                                    <input type="text" v-model="visualContent.signature" class="form-control"
+                                        placeholder="{{sender_name}}" @focus="currentFocusedField = 'signature'"
+                                        @blur="currentFocusedField = 'signature'">
+                                </div>
                             </div>
                         </div>
+
+                        <!-- HTML Editor Mode -->
+                        <div v-if="emailEditorMode === 'html'" class="html-editor">
+                            <!-- Template Variables for HTML -->
+                            <div class="template-variables">
+                                <div class="variables-header">
+                                    <span class="variables-title">🏷️ 可用變數</span>
+                                    <small class="variables-hint">點擊變數即可插入到HTML模板中</small>
+                                </div>
+                                <div class="variables-grid">
+                                    <div v-for="variable in templateVariables" :key="variable.key" class="variable-card"
+                                        @click="insertVariableToHtml(variable.key)" :title="variable.description">
+                                        <div class="variable-icon">{{ variable.icon }}</div>
+                                        <div class="variable-label">{{ variable.label }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">HTML 郵件模板</label>
+                                <textarea v-model="emailContent.html_template"
+                                    class="form-control html-template-textarea" placeholder="請輸入HTML郵件模板..." rows="15"
+                                    required></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Plain Text Fallback -->
+                        <div class="form-group">
+                            <label class="form-label">純文字內容 (自動生成)</label>
+                            <textarea v-model="emailContent.body" class="form-control email-textarea"
+                                placeholder="純文字版本將根據上方內容自動生成" rows="4" readonly></textarea>
+                            <small class="text-muted">當收件人不支援HTML郵件時使用，會自動根據上方內容生成</small>
+                        </div>
                     </div>
-                    
-                    <div class="drawing-effect">
-                        <div class="sparkle"></div>
-                        <div class="sparkle"></div>
-                        <div class="sparkle"></div>
-                        <div class="sparkle"></div>
+
+
+
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" @click="showEmailModal = false">
+                            取消
+                        </button>
+                        <button type="button" class="btn btn-warning" @click="showTestEmailModal = true">
+                            測試寄送
+                        </button>
+                        <button type="submit" class="btn btn-primary" :disabled="lotteryStore.loading">
+                            {{ lotteryStore.loading ? '寄送中...' : '寄送郵件' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview Modal - 全屏显示 -->
+    <div v-if="showPreviewModal" class="modal-overlay" @click="handlePreviewModalOverlayClick">
+        <div class="modal-content preview-modal" @click.stop>
+            <div class="modal-header">
+                <h4>📧 郵件預覽</h4>
+                <button class="close-btn" @click="showPreviewModal = false">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="preview-container">
+                    <div class="preview-frame" v-html="previewContent"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" @click="showPreviewModal = false">
+                    關閉預覽
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test Email Modal - 全屏显示 -->
+    <div v-if="showTestEmailModal" class="modal-overlay" @click="handleTestModalOverlayClick">
+        <div class="modal-content test-email-modal" @click.stop>
+            <div class="modal-header">
+                <h4>🧪 測試郵件寄送</h4>
+                <button class="close-btn" @click="showTestEmailModal = false">×</button>
+            </div>
+            <div class="modal-body">
+                <p>輸入測試收件人的郵箱地址，系統將使用虛擬中獎者資料發送測試郵件：</p>
+
+                <div class="form-group">
+                    <label class="form-label">測試收件人郵箱 (一行一個)</label>
+                    <textarea v-model="testEmailList" class="form-control" rows="5"
+                        placeholder="請輸入測試郵箱地址，一行一個：&#10;test1@example.com&#10;test2@example.com&#10;admin@company.com"></textarea>
+                    <small class="form-text">請輸入有效的郵箱地址，一行一個</small>
+                </div>
+
+                <div class="test-email-info">
+                    <h5>📋 測試資料說明</h5>
+                    <p>系統將使用以下虛擬資料發送測試郵件：</p>
+                    <ul>
+                        <li><strong>得獎人姓名：</strong>測試用戶</li>
+                        <li><strong>學號：</strong>TEST001</li>
+                        <li><strong>系所：</strong>測試系所</li>
+                        <li><strong>年級：</strong>測試年級</li>
+                        <li><strong>獎項：</strong>測試獎品</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" @click="showTestEmailModal = false">
+                    取消
+                </button>
+                <button type="button" class="btn btn-primary" @click="sendTestEmail"
+                    :disabled="lotteryStore.loading || !testEmailList.trim()">
+                    {{ lotteryStore.loading ? '寄送中...' : '發送測試郵件' }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lottery Animation Modal -->
+    <div v-if="showLotteryModal" class="modal-overlay lottery-modal-overlay">
+        <div class="lottery-modal-content" @click.stop>
+            <!-- Preparing Stage -->
+            <div v-if="lotteryAnimationStage === 'preparing'" class="lottery-stage preparing-stage">
+                <div class="lottery-icon">🎲</div>
+                <h2>準備抽獎中...</h2>
+                <div class="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+
+            <!-- Drawing Stage -->
+            <div v-if="lotteryAnimationStage === 'drawing'" class="lottery-stage drawing-stage">
+                <div class="lottery-header">
+                    <div class="lottery-icon spinning">🎯</div>
+                    <h2>正在抽取獎項</h2>
+                    <h3 class="current-prize">{{ currentPrize }}</h3>
+                </div>
+
+                <div class="numbers-container">
+                    <div class="numbers-display">
+                        <div v-for="(number, index) in animatedNumbers" :key="index" class="animated-number">
+                            {{ number }}
+                        </div>
                     </div>
                 </div>
 
-                <!-- Completed Stage -->
-                <div v-if="lotteryAnimationStage === 'completed'" class="lottery-stage completed-stage">
-                    <div class="lottery-icon celebration">🎉</div>
-                    <h2>抽獎完成！</h2>
-                    <div class="results-summary">
-                        <div v-for="(result, index) in lotteryResults" :key="index" class="result-item">
-                            <span class="prize-name">{{ result.name }}</span>
-                            <span class="winner-count">{{ result.winners.length }} 位中獎</span>
-                        </div>
-                    </div>
-                    <p class="auto-close-hint">3秒後自動關閉...</p>
+                <div class="drawing-effect">
+                    <div class="sparkle"></div>
+                    <div class="sparkle"></div>
+                    <div class="sparkle"></div>
+                    <div class="sparkle"></div>
                 </div>
+            </div>
+
+            <!-- Completed Stage -->
+            <div v-if="lotteryAnimationStage === 'completed'" class="lottery-stage completed-stage">
+                <div class="lottery-icon celebration">🎉</div>
+                <h2>抽獎完成！</h2>
+                <div class="results-summary">
+                    <div v-for="(result, index) in lotteryResults" :key="index" class="result-item">
+                        <span class="prize-name">{{ result.name }}</span>
+                        <span class="winner-count">{{ result.winners.length }} 位中獎</span>
+                    </div>
+                </div>
+                <p class="auto-close-hint">3秒後自動關閉...</p>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useLotteryStore } from '../stores/lottery';
 
 const lotteryStore = useLotteryStore();
@@ -810,11 +919,29 @@ const activeTab = ref('participants');
 const prizes = ref([{ name: '', quantity: 1 }]);
 const isDrawCompleted = ref(false);
 const showCreateEventModal = ref(false);
-const newEvent = ref({});
+const showEditEventModal = ref(false);
+const newEvent = ref({
+    name: '',
+    academic_year_term: '',
+    description: '',
+    event_date: '',
+    type: 'general'
+});
+const editEvent = ref({
+    id: null,
+    name: '',
+    academic_year_term: '',
+    description: '',
+    event_date: '',
+    type: 'general'
+});
 const fileInput = ref(null);
+const descriptionTextarea = ref(null);
 
 // Email related variables
 const showEmailModal = ref(false);
+const showPreviewModal = ref(false);
+const showTestEmailModal = ref(false);
 const emailConfig = ref({
     email: '',
     password: '',
@@ -823,6 +950,7 @@ const emailConfig = ref({
     smtp_port: 465,
     use_tls: false
 });
+
 const emailContent = ref({
     subject: '恭喜您中獎了！',
     body: '親愛的 [得獎人姓名]，\n\n恭喜您在 [活動名稱] 中獲得 [獎項名稱]！\n\n請於指定時間前往領獎。\n\n此致\n敬禮',
@@ -847,17 +975,13 @@ const emailContent = ref({
         <div class="header">
             <h1>🎉 恭喜中獎！🎉</h1>
         </div>
-        
         <div class="content">
             <p>親愛的 <strong>{{winner_name}}</strong>，</p>
-            
             <p>恭喜您在「<span class="highlight">{{event_name}}</span>」抽獎活動中獲得獎項！</p>
-            
             <div class="prize-info">
                 <h3>🏆 獲得獎項</h3>
                 <p><strong>{{prize_name}}</strong></p>
             </div>
-            
             <div class="winner-info">
                 <h3>👤 中獎者資訊</h3>
                 <ul>
@@ -867,7 +991,6 @@ const emailContent = ref({
                     <li><strong>年級：</strong>{{grade}}</li>
                 </ul>
             </div>
-            
             <div class="prize-info">
                 <h3>📅 活動資訊</h3>
                 <ul>
@@ -875,13 +998,9 @@ const emailContent = ref({
                     <li><strong>活動日期：</strong>{{event_date}}</li>
                 </ul>
             </div>
-            
             <p>請依照相關規定領取您的獎品。</p>
-            
-            <p>祝您<br>
-            身體健康，學業進步！</p>
+            <p>祝您<br />身體健康，學業進步！</p>
         </div>
-        
         <div class="footer">
             <p>{{sender_name}}</p>
         </div>
@@ -901,11 +1020,9 @@ const templateVariables = ref([
 ]);
 
 // Preview related variables
-const showPreviewModal = ref(false);
 const previewContent = ref('');
 
 // Test email related variables
-const showTestEmailModal = ref(false);
 const testEmailList = ref('');
 
 // Filter related variables
@@ -923,6 +1040,9 @@ const lotteryResults = ref([]);
 // Email editor mode
 const emailEditorMode = ref('visual'); // 'visual' or 'html'
 
+// Email config collapsed state
+const emailConfigCollapsed = ref(true); // 默认折叠邮件设定
+
 // Visual content structure
 const visualContent = ref({
     greeting: '親愛的 {{winner_name}}，',
@@ -932,6 +1052,45 @@ const visualContent = ref({
     closing: '祝您身體健康，學業進步！',
     signature: '{{sender_name}}'
 });
+
+// Modal body scroll prevention
+const preventBodyScroll = () => {
+    document.body.classList.add('modal-open');
+};
+
+const restoreBodyScroll = () => {
+    document.body.classList.remove('modal-open');
+};
+
+// Prevent modal state conflicts with debouncing
+let modalCloseTimeout = null;
+
+// Handle modal overlay click to prevent event conflicts
+const handleModalOverlayClick = (event) => {
+    // Only close if clicking directly on the overlay (not on child elements)
+    if (event.target === event.currentTarget) {
+        if (modalCloseTimeout) clearTimeout(modalCloseTimeout);
+        modalCloseTimeout = setTimeout(() => {
+            showEmailModal.value = false;
+        }, 50);
+    }
+};
+
+const handlePreviewModalOverlayClick = (event) => {
+    if (event.target === event.currentTarget) {
+        if (modalCloseTimeout) clearTimeout(modalCloseTimeout);
+        modalCloseTimeout = setTimeout(() => {
+            showPreviewModal.value = false;
+        }, 50);
+    }
+};
+
+const handleTestModalOverlayClick = (event) => {
+    // Only close if clicking directly on the overlay background
+    if (event.target === event.currentTarget) {
+        showTestEmailModal.value = false;
+    }
+};
 
 // Reset to type selection when component mounts or route changes
 const resetToTypeSelection = () => {
@@ -945,6 +1104,53 @@ onMounted(() => {
     // Only reset if we don't have a selected type
     if (!lotteryStore.selectedType) {
         resetToTypeSelection();
+    }
+});
+
+// Cleanup on unmount - restore body scroll
+onUnmounted(() => {
+    restoreBodyScroll();
+});
+
+// Watch for modal state changes to handle body scroll and load template variables
+watch(showCreateEventModal, (isOpen) => {
+    if (isOpen) {
+        preventBodyScroll();
+    } else {
+        restoreBodyScroll();
+    }
+});
+
+watch(showEditEventModal, (isOpen) => {
+    if (isOpen) {
+        preventBodyScroll();
+    } else {
+        restoreBodyScroll();
+    }
+});
+
+watch(showEmailModal, async (isOpen) => {
+    if (isOpen) {
+        preventBodyScroll();
+        await loadEmailTemplateVariables();
+    } else {
+        restoreBodyScroll();
+    }
+});
+
+watch(showPreviewModal, (isOpen) => {
+    if (isOpen) {
+        preventBodyScroll();
+    } else {
+        restoreBodyScroll();
+    }
+});
+
+watch(showTestEmailModal, (isOpen) => {
+    if (isOpen) {
+        preventBodyScroll();
+    } else {
+        restoreBodyScroll();
     }
 });
 
@@ -1067,18 +1273,18 @@ const runLottery = async () => {
     showLotteryModal.value = true;
     lotteryAnimationStage.value = 'preparing';
     lotteryResults.value = [];
-    
+
     // Start animation sequence
     await startLotteryAnimation();
-    
+
     // Perform actual lottery
     await lotteryStore.runLottery(selectedEventId.value);
-    
+
     // Show results
     lotteryAnimationStage.value = 'completed';
     lotteryResults.value = getFormattedWinners();
     isDrawCompleted.value = true;
-    
+
     // Auto close after showing results
     setTimeout(() => {
         showLotteryModal.value = false;
@@ -1089,18 +1295,18 @@ const runLottery = async () => {
 const startLotteryAnimation = async () => {
     // Preparing stage
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     // Drawing stage
     lotteryAnimationStage.value = 'drawing';
-    
+
     // Animate through each prize
     for (let i = 0; i < lotteryStore.prizeSettings.length; i++) {
         const prize = lotteryStore.prizeSettings[i];
         currentPrize.value = prize.name;
-        
+
         // Generate random numbers animation for this prize
         await animateNumbersForPrize(prize);
-        
+
         // Pause between prizes
         if (i < lotteryStore.prizeSettings.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -1114,7 +1320,7 @@ const animateNumbersForPrize = async (prize) => {
     const animationDuration = 2000; // 2 seconds
     const frameRate = 50; // milliseconds per frame
     const totalFrames = animationDuration / frameRate;
-    
+
     for (let frame = 0; frame < totalFrames; frame++) {
         // Generate random student IDs for animation
         animatedNumbers.value = [];
@@ -1122,7 +1328,7 @@ const animateNumbersForPrize = async (prize) => {
             const randomId = participantIds[Math.floor(Math.random() * participantIds.length)];
             animatedNumbers.value.push(randomId);
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, frameRate));
     }
 };
@@ -1172,17 +1378,30 @@ const getFormattedWinners = () => {
     }
 
     const winnersData = lotteryStore.winners;
-    const formattedWinners = [];
+    console.log('Raw winners data:', winnersData);
+
+    // Handle new API response format: { "result": [{ "prize_name": "...", "quantity": ..., "winners": [...] }] }
+    if (winnersData.result && Array.isArray(winnersData.result)) {
+        const result = winnersData.result.map(prizeData => ({
+            name: prizeData.prize_name || prizeData.name || '未知獎項',
+            quantity: prizeData.quantity || 0,
+            winners: prizeData.winners || []
+        }));
+        console.log('Formatted winners (new API format):', result);
+        return result;
+    }
 
     // Check if the data structure is the expected format (prize name as key with array of winners)
     const firstKey = Object.keys(winnersData)[0];
     if (Array.isArray(winnersData[firstKey])) {
         // Standard format: { "prizeName": [winners...] }
-        return Object.entries(winnersData).map(([prizeName, winners]) => ({
+        const result = Object.entries(winnersData).map(([prizeName, winners]) => ({
             name: prizeName,
             quantity: getPrizeQuantity(prizeName),
             winners: winners || []
         }));
+        console.log('Formatted winners (standard format):', result);
+        return result;
     }
 
     // Handle different possible API response formats
@@ -1206,6 +1425,7 @@ const getFormattedWinners = () => {
     }
 
     // Format 3: Flattened format with numbered keys
+    const formattedWinners = [];
     let prizeIndex = 0;
     while (winnersData[`prize_name${prizeIndex}`] !== undefined || winnersData[`name${prizeIndex}`] !== undefined) {
         const prizeName = winnersData[`prize_name${prizeIndex}`] || winnersData[`name${prizeIndex}`] || `獎項${prizeIndex + 1}`;
@@ -1244,7 +1464,17 @@ const getFormattedWinners = () => {
 
 // Get participant data for a given winner
 const getParticipantData = (winner) => {
+    console.log('Getting participant data for winner:', winner);
+
+    // New API format: winner object already contains all participant data
+    if (winner.student_id && winner.name && winner.department) {
+        console.log('Using winner data directly (new API format)');
+        return winner;
+    }
+
+    // Fallback: try to find participant from participants list
     const participant = lotteryStore.participants.find(p => p.id === winner.participant_id);
+    console.log('Found participant from participants list:', participant);
     return participant || {};
 };
 
@@ -1256,7 +1486,15 @@ const createEvent = async () => {
 
         await lotteryStore.createLotteryEvent(newEvent.value);
         showCreateEventModal.value = false;
-        newEvent.value = {};
+        // Reset with the correct type based on selected lottery type
+        const eventType = lotteryStore.selectedType || 'general';
+        newEvent.value = {
+            name: '',
+            academic_year_term: '',
+            description: '',
+            event_date: '',
+            type: eventType
+        };
 
         // Refresh the events list
         await lotteryStore.fetchLotteryEvents(lotteryStore.selectedType);
@@ -1265,10 +1503,122 @@ const createEvent = async () => {
     }
 };
 
+// Update an existing event
+const updateEvent = async () => {
+    try {
+        await lotteryStore.updateLotteryEvent(editEvent.value.id, {
+            name: editEvent.value.name,
+            academic_year_term: editEvent.value.academic_year_term,
+            description: editEvent.value.description,
+            event_date: editEvent.value.event_date,
+            type: editEvent.value.type
+        });
+
+        showEditEventModal.value = false;
+        alert('活動已成功更新！');
+
+        // Refresh the events list
+        await lotteryStore.fetchLotteryEvents(lotteryStore.selectedType);
+    } catch (error) {
+        console.error('Failed to update event:', error);
+        alert('更新活動失敗：' + (lotteryStore.error || error.message));
+    }
+};
+
+// Handle description input
+const handleDescriptionInput = (event) => {
+    console.log('Description input event:', event.target.value);
+    newEvent.value.description = event.target.value;
+};
+
+// Handle description focus
+const handleDescriptionFocus = () => {
+    console.log('Description textarea focused');
+    if (descriptionTextarea.value) {
+        descriptionTextarea.value.focus();
+    }
+};
+
+// Open create event modal with correct type
+const openCreateEventModal = () => {
+    // Set the activity type based on the selected lottery type
+    const eventType = lotteryStore.selectedType || 'general';
+
+    newEvent.value = {
+        name: '',
+        academic_year_term: '',
+        description: '',
+        event_date: '',
+        type: eventType
+    };
+
+    showCreateEventModal.value = true;
+};
+
+// Handle background click for create modal
+const handleCreateModalBackgroundClick = (event) => {
+    // Only close if clicking directly on the overlay background
+    if (event.target === event.currentTarget) {
+        closeCreateEventModal();
+    }
+};
+
 // Close the create event modal
 const closeCreateEventModal = () => {
     showCreateEventModal.value = false;
-    newEvent.value = {};
+    // Reset with the correct type based on selected lottery type
+    const eventType = lotteryStore.selectedType || 'general';
+    newEvent.value = {
+        name: '',
+        academic_year_term: '',
+        description: '',
+        event_date: '',
+        type: eventType
+    };
+};
+
+// Open edit event modal
+const openEditEventModal = (event) => {
+    // Format the date for datetime-local input
+    const formatDateForInput = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        // Convert to local timezone and format as YYYY-MM-DDTHH:MM
+        const offset = date.getTimezoneOffset() * 60000;
+        const localDate = new Date(date.getTime() - offset);
+        return localDate.toISOString().slice(0, 16);
+    };
+
+    editEvent.value = {
+        id: event.id,
+        name: event.name,
+        academic_year_term: event.academic_year_term,
+        description: event.description,
+        event_date: formatDateForInput(event.event_date),
+        type: event.type
+    };
+    showEditEventModal.value = true;
+};
+
+// Handle background click for edit modal
+const handleEditModalBackgroundClick = (event) => {
+    // Only close if clicking directly on the overlay background
+    if (event.target === event.currentTarget) {
+        closeEditEventModal();
+    }
+};
+
+// Close the edit event modal
+const closeEditEventModal = () => {
+    showEditEventModal.value = false;
+    editEvent.value = {
+        id: null,
+        name: '',
+        academic_year_term: '',
+        description: '',
+        event_date: '',
+        type: 'general'
+    };
 };
 
 // Handle file upload
@@ -1286,16 +1636,104 @@ const handleFileUpload = async (event) => {
         }
 
         // Import the participants
-        await lotteryStore.importParticipants(selectedEventId.value, studentsData);
+        const result = await lotteryStore.importParticipants(selectedEventId.value, studentsData);
 
         // Clear the file input
         event.target.value = '';
 
         const fileType = file.name.split('.').pop().toUpperCase();
-        alert(`成功從 ${fileType} 檔案匯入 ${studentsData.length} 位參與者`);
+
+        // Show detailed results based on new API response format
+        let message = `✅ ${fileType} 檔案上傳完成！\n\n`;
+        message += `📊 處理結果：\n`;
+        message += `• 檔案中總共 ${studentsData.length} 筆資料\n`;
+
+        if (result && typeof result === 'object') {
+            // New API response format
+            if (result.total_uploaded !== undefined) {
+                message += `• 上傳處理 ${result.total_uploaded} 筆資料\n`;
+            }
+            if (result.total_imported !== undefined) {
+                message += `• 成功匯入 ${result.total_imported} 位參與者\n`;
+            }
+            if (result.total_skipped !== undefined) {
+                message += `• 跳過 ${result.total_skipped} 筆資料\n`;
+            }
+            if (result.inserted_count !== undefined && result.inserted_count > 0) {
+                message += `• 新增 ${result.inserted_count} 位新參與者\n`;
+            }
+            if (result.updated_count !== undefined && result.updated_count > 0) {
+                message += `• 更新 ${result.updated_count} 位現有參與者\n`;
+            }
+            if (result.total_eligible !== undefined && result.total_eligible > 0) {
+                message += `• 符合資格 ${result.total_eligible} 位參與者\n`;
+            }
+
+            // Show skipped details if any
+            if (result.skipped && result.skipped.length > 0) {
+                message += `\n⚠️ 跳過的資料詳情：\n`;
+                result.skipped.slice(0, 3).forEach((skipped, index) => {
+                    message += `${index + 1}. ${skipped.student_id}: ${skipped.reason}\n`;
+                });
+                if (result.skipped.length > 3) {
+                    message += `... 還有 ${result.skipped.length - 3} 筆跳過的資料\n`;
+                }
+            }
+
+            // Show imported summary
+            if (result.imported && result.imported.length > 0) {
+                message += `\n✅ 成功匯入範例：\n`;
+                result.imported.slice(0, 2).forEach((imported, index) => {
+                    message += `${index + 1}. ${imported.student_id} - ${imported.student_name}\n`;
+                });
+                if (result.imported.length > 2) {
+                    message += `... 還有 ${result.imported.length - 2} 位參與者\n`;
+                }
+            }
+        } else {
+            message += `• 成功匯入參與者資料`;
+        }
+
+        alert(message);
     } catch (error) {
         console.error('Failed to upload file:', error);
-        alert('檔案上傳失敗：' + error.message);
+        console.error('File details:', {
+            name: file.name,
+            size: file.size,
+            type: file.type
+        });
+
+        let errorMessage = '檔案上傳失敗：\n\n';
+
+        // Enhanced error handling
+        if (error.response?.data?.detail) {
+            // API validation errors
+            if (Array.isArray(error.response.data.detail)) {
+                errorMessage += '❌ 資料驗證錯誤：\n';
+                error.response.data.detail.forEach((detail, index) => {
+                    errorMessage += `${index + 1}. ${detail.loc?.join(' -> ')}: ${detail.msg}\n`;
+                });
+            } else {
+                errorMessage += `❌ ${error.response.data.detail}`;
+            }
+        } else if (error.response?.data?.message) {
+            errorMessage += `❌ ${error.response.data.message}`;
+        } else {
+            errorMessage += `❌ ${error.message}`;
+        }
+
+        // Add troubleshooting tips
+        errorMessage += '\n\n💡 解決建議：';
+        errorMessage += '\n• 請檢查檔案格式是否正確';
+        errorMessage += '\n• 確認欄位名稱符合要求';
+        errorMessage += '\n• 查看範例檔案格式';
+
+        if (file.name.includes('期末評量') || file.type.includes('excel')) {
+            errorMessage += '\n• Excel 檔案請確保沒有合併儲存格';
+            errorMessage += '\n• 建議另存為 CSV 格式重試';
+        }
+
+        alert(errorMessage);
     }
 };
 
@@ -1316,22 +1754,7 @@ const deleteAllParticipants = async () => {
     }
 };
 
-// Confirm delete a participant
-const confirmDeleteParticipant = (participantId) => {
-    if (confirm('確定要刪除此參與者嗎？此操作無法復原。')) {
-        deleteParticipant(participantId);
-    }
-};
 
-// Delete a specific participant
-const deleteParticipant = async (participantId) => {
-    try {
-        await lotteryStore.deleteParticipant(participantId);
-        alert('已成功刪除參與者');
-    } catch (error) {
-        console.error('Failed to delete participant:', error);
-    }
-};
 
 // Email related methods
 const loadEmailTemplateVariables = async () => {
@@ -1702,6 +2125,37 @@ const sendTestEmail = async () => {
     }
 };
 
+// Download sample CSV
+const downloadSampleCSV = (type) => {
+    let csvContent = '';
+    let filename = '';
+
+    if (type === 'general') {
+        csvContent = 'student_id,name,department,grade\n' +
+            'S1234567,王小明,資訊工程學系,大三\n' +
+            'S1234568,李小華,電機工程學系,大二\n' +
+            'S1234569,張小美,企業管理學系,大四\n';
+        filename = 'sample_students_general.csv';
+    } else if (type === 'final_teaching') {
+        csvContent = 'student_id,name,department,grade,required_surveys,completed_surveys,surveys_completed,valid_surveys\n' +
+            'S1234567,王小明,資訊工程學系,大三,5,5,Y,Y\n' +
+            'S1234568,李小華,電機工程學系,大二,5,4,N,N\n' +
+            'S1234569,張小美,企業管理學系,大四,5,5,Y,Y\n';
+        filename = 'sample_students_final_teaching.csv';
+    }
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
 // Confirm delete event
 const confirmDeleteEvent = async (event) => {
     if (confirm(`確定要刪除活動「${event.name}」嗎？此操作不可復原。`)) {
@@ -1773,7 +2227,7 @@ const getStatusText = (status) => {
 
 // Update available years from events
 const updateAvailableYears = () => {
-    const years = [...new Set(lotteryStore.lotteryEvents.map(event => 
+    const years = [...new Set(lotteryStore.lotteryEvents.map(event =>
         event.academic_year_term.split('-')[0] // 取學年部分，例如 "112-1" -> "112"
     ))].sort((a, b) => b - a); // 倒序排列，最新的在前
     availableYears.value = years;
@@ -1784,7 +2238,7 @@ const filterEventsByYear = () => {
     if (!selectedYear.value) {
         filteredEvents.value = [...lotteryStore.lotteryEvents];
     } else {
-        filteredEvents.value = lotteryStore.lotteryEvents.filter(event => 
+        filteredEvents.value = lotteryStore.lotteryEvents.filter(event =>
             event.academic_year_term.startsWith(selectedYear.value)
         );
     }
@@ -1796,12 +2250,7 @@ const initializeFilteredEvents = () => {
     updateAvailableYears();
 };
 
-// Watch for email modal opening to load template variables
-watch(showEmailModal, async (newValue) => {
-    if (newValue) {
-        await loadEmailTemplateVariables();
-    }
-});
+
 
 // Watch for visual content changes to auto-generate HTML and plain text
 watch(visualContent, () => {
@@ -1938,7 +2387,7 @@ watch(emailEditorMode, (newMode) => {
         align-items: stretch;
         gap: 1rem;
     }
-    
+
     .header-actions {
         justify-content: center;
     }
@@ -2098,11 +2547,11 @@ watch(emailEditorMode, (newMode) => {
         gap: 1rem;
         align-items: stretch;
     }
-    
+
     .filter-group {
         justify-content: center;
     }
-    
+
     .events-count {
         justify-content: center;
     }
@@ -2189,8 +2638,13 @@ watch(emailEditorMode, (newMode) => {
     animation: dot-pulse 1.4s ease-in-out infinite both;
 }
 
-.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
-.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+.loading-dots span:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.loading-dots span:nth-child(2) {
+    animation-delay: -0.16s;
+}
 
 /* 抽奖阶段动画 */
 .lottery-header {
@@ -2314,25 +2768,44 @@ watch(emailEditorMode, (newMode) => {
 
 /* 动画关键帧 */
 @keyframes rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 @keyframes bounce {
-    from { transform: translateY(0); }
-    to { transform: translateY(-10px); }
+    from {
+        transform: translateY(0);
+    }
+
+    to {
+        transform: translateY(-10px);
+    }
 }
 
 @keyframes dot-pulse {
-    0%, 80%, 100% {
+
+    0%,
+    80%,
+    100% {
         transform: scale(0);
         opacity: 0.5;
     }
+
     40% {
         transform: scale(1);
         opacity: 1;
@@ -2344,10 +2817,12 @@ watch(emailEditorMode, (newMode) => {
         transform: scale(0.8);
         opacity: 0.7;
     }
+
     50% {
         transform: scale(1.1);
         opacity: 1;
     }
+
     100% {
         transform: scale(1);
         opacity: 1;
@@ -2355,10 +2830,13 @@ watch(emailEditorMode, (newMode) => {
 }
 
 @keyframes sparkle {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 0;
         transform: scale(0);
     }
+
     50% {
         opacity: 1;
         transform: scale(1);
@@ -2366,8 +2844,13 @@ watch(emailEditorMode, (newMode) => {
 }
 
 @keyframes fade-pulse {
-    from { opacity: 0.6; }
-    to { opacity: 1; }
+    from {
+        opacity: 0.6;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 /* 响应式设计 */
@@ -2376,25 +2859,25 @@ watch(emailEditorMode, (newMode) => {
         padding: 2rem;
         margin: 1rem;
     }
-    
+
     .lottery-icon {
         font-size: 3rem;
     }
-    
+
     .lottery-stage h2 {
         font-size: 1.5rem;
     }
-    
+
     .lottery-stage h3 {
         font-size: 1.2rem;
     }
-    
+
     .animated-number {
         font-size: 1rem;
         padding: 0.6rem 1rem;
         min-width: 60px;
     }
-    
+
     .numbers-display {
         gap: 0.5rem;
     }
@@ -2437,6 +2920,13 @@ watch(emailEditorMode, (newMode) => {
     gap: 0.5rem;
 }
 
+.event-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.edit-btn,
 .delete-btn {
     background: none;
     border: none;
@@ -2451,6 +2941,12 @@ watch(emailEditorMode, (newMode) => {
     justify-content: center;
     transition: all 0.3s ease;
     opacity: 0.6;
+}
+
+.edit-btn:hover {
+    background: rgba(52, 152, 219, 0.1);
+    opacity: 1;
+    transform: scale(1.1);
 }
 
 .delete-btn:hover {
@@ -2578,12 +3074,12 @@ watch(emailEditorMode, (newMode) => {
         grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
         gap: 1rem;
     }
-    
+
     .event-item {
         min-height: 180px;
         padding: 1.2rem;
     }
-    
+
     .event-content h4 {
         font-size: 1.1rem;
     }
@@ -3034,48 +3530,145 @@ watch(emailEditorMode, (newMode) => {
 
 .upload-instructions {
     margin-top: 2rem;
-    padding: 1.5rem;
+    padding: 2rem;
     background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-    border-radius: 8px;
+    border-radius: 16px;
     border: 1px solid #dee2e6;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border-left: 5px solid #17a2b8;
 }
 
 .upload-instructions h4 {
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
     color: #2c3e50;
-    font-size: 1.1rem;
-    font-weight: 600;
+    font-size: 1.3rem;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 0.5px;
 }
 
 .format-info {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
+    margin-bottom: 2rem;
 }
 
 @media (max-width: 768px) {
     .format-info {
         grid-template-columns: 1fr;
-        gap: 1rem;
+        gap: 1.5rem;
     }
 }
 
+.format-section {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.format-section:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
 .format-section h5 {
-    margin-bottom: 0.5rem;
-    color: #495057;
-    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: #2c3e50;
+    font-size: 1.1rem;
     font-weight: 600;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .format-section ul {
-    list-style: disc;
-    padding-left: 1.5rem;
-    margin: 0;
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1.5rem 0;
 }
 
 .format-section li {
-    margin-bottom: 0.25rem;
-    color: #6c757d;
+    margin-bottom: 0.5rem;
+    color: #495057;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid #f8f9fa;
+    font-size: 0.9rem;
+}
+
+.format-section li strong {
+    color: #2c3e50;
+    font-weight: 600;
+    min-width: 120px;
+    display: inline-block;
+}
+
+.download-sample {
+    text-align: center;
+}
+
+.btn-outline-primary {
+    background: transparent;
+    color: #007bff;
+    border: 2px solid #007bff;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-outline-primary:hover {
+    background: #007bff;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.format-notes {
+    background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border-left: 4px solid #2196f3;
+}
+
+.format-notes p {
+    margin: 0 0 1rem 0;
+    color: #1976d2;
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.format-notes ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.format-notes li {
+    margin-bottom: 0.5rem;
+    color: #37474f;
+    font-size: 0.9rem;
+    padding-left: 1.5rem;
+    position: relative;
+}
+
+.format-notes li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: #4caf50;
+    font-weight: bold;
 }
 
 /* Modal Styles */
@@ -3088,8 +3681,108 @@ watch(emailEditorMode, (newMode) => {
     background-color: rgba(0, 0, 0, 0.5);
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     z-index: 1000;
+    overflow-y: auto;
+    padding: 20px 0;
+    -webkit-overflow-scrolling: touch;
+    will-change: transform;
+    backface-visibility: hidden;
+}
+
+/* Higher z-index for nested modals */
+.modal-overlay .modal-overlay {
+    z-index: 1001;
+}
+
+.preview-modal {
+    z-index: 1001;
+}
+
+.test-email-modal {
+    z-index: 1001;
+    position: relative;
+    padding: 0;
+    margin: 20px auto;
+}
+
+.test-email-modal .modal-body {
+    padding: 2rem;
+}
+
+.test-email-modal .modal-actions {
+    padding: 1.5rem 2rem 2rem 2rem;
+    margin-top: 0;
+}
+
+/* Collapsible email config section */
+.collapsible-section {
+    margin-top: 1.5rem;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.collapsible-section .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.collapsible-section .section-header:hover {
+    background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+}
+
+.collapsible-section .section-header h5 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.collapse-indicator {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #6c757d;
+    transition: transform 0.3s ease;
+}
+
+.collapse-indicator.collapsed {
+    transform: rotate(0deg);
+}
+
+.collapse-indicator:not(.collapsed) {
+    transform: rotate(0deg);
+}
+
+.collapsible-content {
+    padding: 1.5rem;
+    background-color: #fff;
+}
+
+/* 为邮件内容添加更多强调 */
+.email-content-section {
+    background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+    border: 2px solid #e3f2fd;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 12px rgba(33, 150, 243, 0.1);
+}
+
+.email-content-section h5 {
+    color: #1976d2;
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e3f2fd;
 }
 
 .modal-content {
@@ -3098,8 +3791,13 @@ watch(emailEditorMode, (newMode) => {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     max-width: 500px;
     width: 90%;
-    max-height: 90vh;
+    max-height: calc(100vh - 40px);
     overflow-y: auto;
+    margin: auto;
+    position: relative;
+    transform: translateZ(0);
+    -webkit-overflow-scrolling: touch;
+    backface-visibility: hidden;
 }
 
 .modal-header {
@@ -3135,6 +3833,7 @@ watch(emailEditorMode, (newMode) => {
 
 .modal-body {
     padding: 1.5rem;
+    padding-bottom: 0.5rem;
 }
 
 .modal-actions {
@@ -3142,6 +3841,7 @@ watch(emailEditorMode, (newMode) => {
     gap: 1rem;
     justify-content: flex-end;
     margin-top: 1.5rem;
+    padding: 1rem 0;
 }
 
 .form-group {
@@ -3170,6 +3870,122 @@ watch(emailEditorMode, (newMode) => {
     box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
+.modal-content .form-control {
+    pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+}
+
+.modal-content textarea {
+    pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    resize: vertical;
+}
+
+.create-event-modal .form-control {
+    pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    cursor: text !important;
+}
+
+.create-event-modal textarea {
+    pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    resize: vertical;
+    cursor: text !important;
+    background-color: white !important;
+    border: 1px solid #ddd !important;
+    position: relative !important;
+    z-index: 1010 !important;
+}
+
+.test-email-modal .form-control {
+    pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    cursor: text !important;
+    background-color: white !important;
+    border: 1px solid #ddd !important;
+    position: relative !important;
+    z-index: 1010 !important;
+}
+
+.test-email-modal textarea {
+    pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    resize: vertical;
+    cursor: text !important;
+    background-color: white !important;
+    border: 1px solid #ddd !important;
+    position: relative !important;
+    z-index: 1010 !important;
+}
+
+.create-event-modal {
+    z-index: 1005 !important;
+}
+
+.create-event-modal .modal-body {
+    z-index: 1006 !important;
+}
+
+.create-event-modal .form-group {
+    z-index: 1007 !important;
+}
+
+.edit-event-modal {
+    z-index: 1005 !important;
+    max-width: 500px;
+    width: 90%;
+}
+
+.edit-event-modal .modal-body {
+    z-index: 1006 !important;
+}
+
+.edit-event-modal .form-control {
+    pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    cursor: text !important;
+}
+
+.edit-event-modal textarea {
+    pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    resize: vertical;
+    cursor: text !important;
+    background-color: white !important;
+    border: 1px solid #ddd !important;
+    position: relative !important;
+    z-index: 1010 !important;
+}
+
+.edit-event-modal .form-group {
+    z-index: 1007 !important;
+}
+
 /* Email related styles */
 .winners-actions {
     display: flex;
@@ -3191,6 +4007,8 @@ watch(emailEditorMode, (newMode) => {
 .email-modal {
     max-width: 700px;
     width: 95%;
+    margin-top: 20px;
+    margin-bottom: 20px;
 }
 
 .test-email-modal {
@@ -3283,12 +4101,19 @@ watch(emailEditorMode, (newMode) => {
 }
 
 @keyframes bounce {
-    0%, 20%, 50%, 80%, 100% {
+
+    0%,
+    20%,
+    50%,
+    80%,
+    100% {
         transform: translateY(0);
     }
+
     40% {
         transform: translateY(-10px);
     }
+
     60% {
         transform: translateY(-5px);
     }
@@ -3298,9 +4123,11 @@ watch(emailEditorMode, (newMode) => {
     0% {
         box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
     }
+
     50% {
         box-shadow: 0 4px 20px rgba(52, 152, 219, 0.6);
     }
+
     100% {
         box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
     }
@@ -3621,10 +4448,63 @@ watch(emailEditorMode, (newMode) => {
     background-color: #5a6268;
 }
 
+/* Prevent body scroll when modal is open */
+body.modal-open {
+    overflow: hidden !important;
+}
+
+/* Ensure modal overlay covers entire viewport */
+.modal-overlay {
+    pointer-events: auto;
+}
+
+.modal-overlay * {
+    pointer-events: auto;
+}
+
+/* Ensure modal content is properly contained */
+.modal-content {
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 40px);
+    overflow: hidden;
+}
+
+.modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+/* Ensure email modal has proper sizing for long content */
+.email-modal {
+    max-height: calc(100vh - 40px);
+}
+
+.email-modal .modal-body {
+    overflow-y: auto;
+}
+
+/* Prevent scrolling issues in long lists */
+.prize-winners {
+    margin-bottom: 2rem;
+}
+
+.prize-winners table {
+    table-layout: fixed;
+    word-wrap: break-word;
+}
+
 @media (max-width: 768px) {
     .email-modal {
         max-width: 95%;
         margin: 1rem;
+        max-height: calc(100vh - 40px);
+    }
+
+    .modal-body {
+        max-height: calc(100vh - 120px);
     }
 
     .winners-actions {

@@ -18,6 +18,11 @@ export const useAuthStore = defineStore('auth', () => {
                 localStorage.setItem('token', token.value)
                 localStorage.setItem('user', JSON.stringify(user.value))
 
+                // Update axios default headers
+                if (window.updateApiHeaders) {
+                    window.updateApiHeaders()
+                }
+
                 return true
             }
             return false
